@@ -1,0 +1,54 @@
+/* The greedy "Input" collapsible entry, rendered inside the Tokens tab (only while greedy is active).
+   It reuses the side panel's own design system — the `bjs-collapsible-entry` primitive plus the
+   `--bjs-*` token ramp — so the fields match the properties-panel look. No dependency on the token
+   panel's classes: these `wb-input-*` rules simply theme the file fields with the side-panel tokens. */
+
+.wb-input-field {
+  margin-bottom: 6px;
+}
+
+.wb-input-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--bjs-grey-35, hsl(225, 10%, 35%));
+}
+
+.wb-input-btn {
+  font: inherit;
+  padding: 5px 10px;
+  border: 1px solid var(--bjs-grey-75, hsl(225, 10%, 75%));
+  border-radius: 2px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.wb-input-btn:hover:not(:disabled) {
+  background: var(--bjs-grey-95, hsl(225, 10%, 95%));
+}
+
+.wb-input-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* file picker: full-width, left-aligned, ellipsising the chosen filename */
+.wb-input-file {
+  width: 100%;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-input-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
+}
+
+.wb-input-error {
+  font-size: 12px;
+  color: hsl(0, 65%, 45%);
+  white-space: pre-wrap;
+}

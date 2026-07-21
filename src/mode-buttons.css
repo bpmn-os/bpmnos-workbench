@@ -31,21 +31,25 @@
   cursor: pointer;
 }
 
-/* composite mode icon: a thin outline ring (fa-stack-2x) with a small centred inner glyph (fa-stack-1x).
-   Both inherit the surrounding colour (button: grey / accent on hover / white when active). Not scoped to
-   the buttons so the same icon can appear inline in the Tokens-panel "model" note. */
+/* composite mode icon: one inline SVG — a thin outline ring with a small centred inner glyph. It inherits
+   the surrounding colour (button: grey / accent on hover / white when active) via stroke/fill=currentColor.
+   Not scoped to the buttons, so the same icon can appear inline in the Tokens-panel "model" note. */
 .wb-mode-icon {
-  font-size: 13px; /* ring = 2em = 26px */
+  display: inline-block; /* flows inline in the model note; the buttons centre it via their flex layout */
+  width: 24px;
+  height: 24px;
   vertical-align: middle;
+  overflow: visible; /* the ring is tangent to the viewBox edges — don't let the default clip shave it */
 }
 
-.wb-mode-inner {
-  font-size: 0.9em; /* the thin outline ring leaves a large hollow centre for the glyph */
+/* inline in the Tokens-tab model note, these icons are clickable source switches (createModeButtons
+   delegates the click); give them the pointer + accent-hover the note's own icons get */
+.wb-mode-icon[data-mode-source] {
+  cursor: pointer;
 }
 
-/* the play triangle is visually left-heavy — nudge it to optically centre in the ring */
-.wb-mode-play {
-  margin-left: 1px;
+.wb-mode-icon[data-mode-source]:hover {
+  color: var(--bjs-accent, hsl(205, 100%, 45%));
 }
 
 .wb-mode-buttons button + button {

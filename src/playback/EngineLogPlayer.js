@@ -39,6 +39,12 @@ function abortError() {
   return err;
 }
 
+// True for a multi-instance activity node (its token spawns per-instance sub-tokens).
+function isMultiInstanceNode(element) {
+  const lc = element && element.businessObject && element.businessObject.loopCharacteristics;
+  return !!(lc && lc.$type === 'bpmn:MultiInstanceLoopCharacteristics');
+}
+
 export default function EngineLogPlayer(eventBus, animation, primitives, elementRegistry) {
   this._eventBus = eventBus;
   this._animation = animation;
@@ -52,6 +58,7 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   this._resumers = [];
   this._run = Promise.resolve();
   this._time = null;
+  this._logSource = null; // optional consumer hook: yields a log on demand (see setLogSource)
 
   // abort a run if the diagram is swapped out from under it
   eventBus.on([ 'diagram.clear', 'diagram.destroy' ], () => {
@@ -77,6 +84,21 @@ EngineLogPlayer.prototype.hasLog = function() {
 
 EngineLogPlayer.prototype.getState = function() {
   return this._state;
+};
+
+/**
+ * Register (or clear, with `null`) a log source — a function returning `log | Promise<log>` that yields the
+ * log lazily when playback starts (here: a greedy engine run). Mirrors bpmn-js-animation's `Playback`, so
+ * the TokenPanel's run button drives it identically: the source is consulted only on an idle→start, never
+ * on resume. Firing `playback.changed` lets the panel re-enable its run button when a source appears.
+ */
+EngineLogPlayer.prototype.setLogSource = function(source) {
+  this._logSource = source || null;
+  this._eventBus.fire('playback.changed', { state: this._state });
+};
+
+EngineLogPlayer.prototype.getLogSource = function() {
+  return this._logSource;
 };
 
 /** The latest simulated time seen in the stream (clock ticks / token timestamps), or null. */
@@ -224,7 +246,12 @@ EngineLogPlayer.prototype._applyEvent = function(event) {
 
 EngineLogPlayer.prototype._applyToken = async function(token) {
   try {
+    // Serialise behind the stack/auto-focus reveal arc (600ms): settle any in-flight arc BEFORE this
+    // step (so a createToken doesn't add a dot mid-arc — createToken, unlike advanceToken, doesn't wait
+    // on its own), then let this step's own arc settle before the next entry runs.
+    await this._animation.whenFocused();
     await this._resolve(token);
+    await this._animation.whenFocused();
   } catch (err) {
     // a single mis-resolved entry must not tear down the whole run — report it and carry on
     console.warn('[enginePlayback] could not apply token entry', token, err);
@@ -242,6 +269,17 @@ EngineLogPlayer.prototype._resolve = async function(token) {
   const anim = this._animation;
 
   const element = this._elementRegistry.get(node);
+
+  // EVENT-SUB-PROCESS SCOPE TOKEN — the engine emits a scope token at the event-sub-process node itself
+  // for every firing ("<enclosing>^<evtsp>#<k>"). The animation already represents a firing by the token
+  // at its START EVENT (which stacks the firing at the event-sub node), so this scope token is redundant —
+  // and its "^<evtsp>#<k>" id even collides with the MI-sub id shape (`_miParent`), double-stacking the
+  // event-sub node. Skip it: the start-event token owns the firing's stack key and drops it on consume.
+  if (nodeId && element && is(element, 'bpmn:SubProcess') &&
+      element.businessObject && element.businessObject.triggeredByEvent) {
+    return;
+  }
+
   // a process/scope-level token (no nodeId) is always container-like; otherwise classify the node
   const containerLike = !nodeId || (element && isAny(element, [ 'bpmn:Activity', 'bpmn:Process', 'bpmn:Participant' ]));
 
@@ -256,11 +294,58 @@ EngineLogPlayer.prototype._resolve = async function(token) {
     if (!this._birth(node, label, element)) {
       return; // couldn't create it (e.g. a gateway / plain event with no token) — nothing to draw
     }
+    await anim.whenEntered(node, label); // let the entrance flip play (and be seen) before any next step
     await anim.whenFocused();
     // CREATED flips in and continues; ENTERED sits at its birth position (no anim). Only READY still
     // adds the wait pulse below (it is waiting for the entry decision).
     if (state !== 'READY') {
       return;
+    }
+  }
+
+  // MULTI-INSTANCE MAIN — the token at an MI activity whose label is NOT a sub-instance ("…^node#k") is
+  // the outer/main thread. In the animation model it stays resting on the incoming flow (the spawn point)
+  // and NEVER enters: the lib hides it (`_parkMIParent`) once a sub starts running and reveals it onto the
+  // outflow on the last sub's consume. So we skip the container sweeps for it — advancing it to entry/busy
+  // would wrongly park it and show it stacked among the sub-instances. Only its flow hop / death act here.
+  if (nodeId && isMultiInstanceNode(element) && !this._miParent(node, label)) {
+    switch (state) {
+      case 'ARRIVED':
+        this._cue(node, label, CUE, sequenceFlowId); // pulse-pause on the inflow while it can still spawn
+        return;
+      case 'DEPARTED':
+        // released onto the outflow by the last sub's consume — travel it onward
+        return sequenceFlowId ? anim.advanceToken({ node, label, sequenceFlow: sequenceFlowId }) : undefined;
+      case 'DONE':
+      case 'WITHDRAWN':
+      case 'FAILED':
+        return anim.getToken(node, label) ? anim.consumeToken({ node, label }) : undefined;
+      case 'FAILING':
+        this._error(node, label);
+        return;
+      default:
+        return; // READY / ENTERED / BUSY / COMPLETED / EXITING / WAITING: stay put; the lib parks it
+    }
+  }
+
+  // REVEAL-THEN-ACT — mirror the Animator's replay: when following instances (auto-focus on), bring this
+  // token's plane + instance to the front and let the stack scroll SETTLE **before** its step animates,
+  // so a back-stacked token is seen scrolling in and THEN moving (not already moved).
+  //
+  // Only when the step actually MOVES the token, though: a cue-only state — arrival / wait pulse, an
+  // event's busy/completed, exiting — changes nothing positional, so it must NOT scroll the stack, else a
+  // back instance is yanked to the front just to change a pulse. Moves are the advanceToken/travel steps:
+  // READY/ENTERED (→ entry or centre), DEPARTED (→ flow), and — for a container only — BUSY/COMPLETED.
+  const moves = state === 'READY' || state === 'ENTERED' || state === 'DEPARTED' ||
+    (containerLike && (state === 'BUSY' || state === 'COMPLETED'));
+  if (moves && anim.isAutoFocus && anim.isAutoFocus()) {
+    const current = anim.getToken(node, label);
+    if (current) {
+      if (typeof this._primitives.drillTo === 'function') {
+        this._primitives.drillTo(node); // follow across planes (a collapsed sub-process body)
+      }
+      anim.focusToken(current);
+      await anim.whenFocused();
     }
   }
 
@@ -286,9 +371,10 @@ EngineLogPlayer.prototype._resolve = async function(token) {
       if (containerLike) {
         return anim.advanceToken({ node, label, position: BUSY, animate: CUE });
       }
-      // a catch event doing its work (e.g. a timer counting down) — pulse in place, then dwell
+      // a catch event doing its work (e.g. a timer counting down) — pulse in place. A cue-only change
+      // (no position change) does not wait: the pulse persists on the token until the next state.
       this._cue(node, label, CUE);
-      return this._dwell();
+      return;
 
     case 'COMPLETED':
       if (containerLike) {
@@ -318,9 +404,9 @@ EngineLogPlayer.prototype._resolve = async function(token) {
       return;
 
     case 'WAITING':
-      // an MI main token, or a token parked at a converging gateway — pulse in place
+      // an MI main token, or a token parked at a converging gateway — pulse in place. Cue-only, so no wait.
       this._cue(node, label, CUE);
-      return this._dwell();
+      return;
 
     case 'DONE':
     case 'WITHDRAWN':
@@ -394,8 +480,13 @@ EngineLogPlayer.prototype._parentOf = function(node, label, element) {
 
 // The MI main a sub-instance spawns from as { parentNode, parentLabel }, or undefined for anything else.
 // The engine ids an MI sub "<parent>^<miNode>#<k>" (a convention the workbench owns, not the lib), so its
-// main is at (node, "<parent>") — the id with the "^<node>#<k>" slot for THIS node removed.
+// main is at (node, "<parent>") — the id with the "^<node>#<k>" slot for THIS node removed. Gated on the
+// node actually being a multi-instance activity, since a NON-interrupting event-sub firing shares the very
+// same "<enclosing>^<node>#<k>" id shape — without this, an event-sub token would be mis-read as an MI sub.
 EngineLogPlayer.prototype._miParent = function(node, label) {
+  if (!isMultiInstanceNode(this._elementRegistry.get(node))) {
+    return undefined;
+  }
   const s = String(label);
   const slot = '^' + node + '#';
   const at = s.lastIndexOf(slot);
@@ -428,11 +519,4 @@ EngineLogPlayer.prototype._error = function(node, label) {
   } catch (err) {
     console.warn('[enginePlayback] error effect failed', node, label, err);
   }
-};
-
-// let a pure wait state (a cue with no movement) stay on screen for one animation step, so the pulse
-// is actually seen; the next entry's gate makes pause/stop responsive again right after.
-EngineLogPlayer.prototype._dwell = function() {
-  const ms = this._primitives.getAnimationDuration();
-  return ms ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
 };

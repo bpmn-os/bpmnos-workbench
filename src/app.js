@@ -31,6 +31,7 @@ import ContextPadCompatModule from './context-pad-compat';
 
 // native BPMN-OS execution-log playback (this repo) — overrides the packaged `playback` service
 import EnginePlaybackModule from './playback';
+import createGreedy from './greedy';           // greedy simulation: runs the wasm engine live
 import createModeButtons, { modeIcon } from './mode-buttons';
 
 import newDiagram from './newDiagram.bpmn?raw';
@@ -47,9 +48,10 @@ const modeler = new BpmnModeler({
     bpmnlint: getRules()
   },
   tokenPanel: {
-    // shown in the Tokens tab while in Model mode — points at the on-canvas Playback button (same icon)
-    modelNote: 'Click ' + modeIcon('fa-play wb-mode-play', 'playback')
-      + ' to start/end playback of a BPMN-OS execution log (load one with "Load log").'
+    // shown in the Tokens tab while in Model mode — points at the on-canvas mode buttons (same icons)
+    modelNote: 'Click ' + modeIcon('greedy', 'greedy')
+      + ' to start/end a greedy simulation, or ' + modeIcon('playback', 'playback')
+      + ' to start/end playback of execution logs.'
   },
   sidePanel: {
     parent: '#side-panel',
@@ -58,7 +60,7 @@ const modeler = new BpmnModeler({
       + '<span class="wb-brand-name">BPMNOS Workbench</span>'
       + '<a class="wb-brand-gh" href="https://github.com/bpmn-os/bpmnos-workbench" target="_blank"'
       + ' rel="noopener" title="View source on GitHub" aria-label="GitHub repository">'
-      + '<i class="fab fa-github"></i></a>'
+      + '<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>'
       + '</div>'
   },
   additionalModules: [
@@ -75,13 +77,25 @@ const modeler = new BpmnModeler({
   moddleExtensions
 });
 
+// Fit the diagram to the viewport whenever a model is imported and rendered — the toolbar's "Center"
+// action (canvas fit-viewport), invoked automatically. Covers the initial diagram, toolbar "Open", and
+// the ?src= deep-link below.
+modeler.on('import.done', () => {
+  try {
+    modeler.get('canvas').zoom('fit-viewport', 'auto');
+  } catch (err) {
+    // nothing to fit (e.g. an import that didn't render) — ignore
+  }
+});
+
 modeler.importXML(newDiagram).catch(err => console.error('failed to import diagram', err));
 
 // On-canvas file/view toolbar (open, save, export SVG, centre, zoom) — packaged by bpmn-workbench.
 createToolbar(modeler);
 
-// The on-canvas Playback toggle (the transport lives in the Tokens side-panel tab).
-createModeButtons(modeler);
+// The on-canvas mode toggles: greedy simulation (microchip, runs the wasm engine) and playback (play).
+const greedy = createGreedy(modeler);
+createModeButtons(modeler, greedy);
 
 // Optional deep-linking: ?src=<url> loads a diagram on startup.
 const src = new URL(window.location.href).searchParams.get('src');

@@ -44,6 +44,9 @@ export default defineConfig({
   // The plugin above still covers the production rollup build, where optimizeDeps does not apply.
   optimizeDeps: {
     include: [ 'bpmnos-js' ],
+    // the BPMN-OS wasm engine's emscripten glue loads bpmnos.wasm via new URL('bpmnos.wasm',
+    // import.meta.url); keep it out of the dep pre-bundler so that relative resolution survives.
+    exclude: [ '@bpmn-os/bpmnos-wasm' ],
     esbuildOptions: {
       loader: { '.js': 'jsx' },
       jsx: 'automatic',
