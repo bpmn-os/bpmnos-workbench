@@ -8,10 +8,43 @@ side-panel design, the `bpmnos-wasm` API contract, requirements R1–R5, and wor
 
 ## Current state
 
-**Empty scaffold.** The repo contains only `README.md` and `LICENSE` (MIT, © 2026 Asvin Goel);
-remote is `github.com/bpmn-os/bpmnos-workbench`. Nothing has been built yet — the commands, file
-layout, and wiring below describe the *intended* project, drawn from its four source repositories.
-When you add real code, update this file to match (and drop this notice).
+**Playback (milestone 1) is built.** A Vite app (`npm run dev` / `build` / `preview`; `node >=22`)
+mirroring `bpmn-workbench`: a `BpmnModeler` with the full `bpmnos-js` module (moddle + decision-task +
+properties panel, auto-hosted as the side panel's "Properties" tab), `bpmn-workbench`'s
+rules/issues/toolbar, and **native playback of BPMN-OS engine execution logs**. It boots on a **blank
+diagram** — nothing is hardwired: load a model with the toolbar and an engine `-log.json` with the Tokens
+tab's "Load log". `src/examples/earliest-arrival.{bpmn,-log.json}` (the EAP instance from
+`BPMNOSInstances.jl`) is a loadable sample, not auto-loaded. Manual and greedy simulation (and the wasm
+engine) are **not** built yet — playback replays a recorded `-log.json`, no engine in the loop.
+
+**Reuse upstream, don't reinvent.** The playback UI is bpmn-js-animation's own **TokenPanel** (the
+"Tokens" side-panel tab: run/pause, speed, Load log); the mode toggle uses bpmn-workbench's mode-button
+CSS. The only new UI logic is the resolver.
+
+Key source (this repo):
+- `src/playback/EngineLogPlayer.js` — registered as the **`playback`** service (overriding
+  bpmn-js-animation's packaged `Playback`), so the **TokenPanel** drives it via the same
+  `play(log)`/`pause`/`resume`/`stop`/`getState` + `playback.changed` interface. `play(log)` reads the
+  engine's `{token|event|message}` stream and drives the `animation` service **directly** — it does NOT
+  translate to the library's 5-action execution log. Per-state → animation-call mapping (R1 positions,
+  `pulse` in playback).
+- `src/playback/index.js` — `EnginePlaybackModule` (`playback: EngineLogPlayer`; list AFTER
+  `TokenPanelModule` in `additionalModules` so the override wins). Depends on `AnimationModule`.
+- `src/mode-buttons.js` + `mode-buttons.css` — the on-canvas Playback toggle (`mode.setMode('model'|
+  'playback')`); CSS copied verbatim from bpmn-workbench (not exported by that package).
+- `src/context-pad-compat.js` — copy of bpmnos-js's context-pad shim (that module is not exported).
+- `src/bpmnos.css` — copy of bpmnos-js's decision-task icon css (not exported by the package).
+- `vite.config.js` — a plugin transforms bpmnos-js's preact-JSX-in-`.js` for the production (rollup)
+  build; in dev, `optimizeDeps.include: ['bpmnos-js']` pre-bundles it with the jsx loader (which also
+  interop-wraps its CommonJS deps like `inherits`).
+
+The engine token model and the animation token model are the **same shape** (an instance-root scope
+token spawns a child at its start event; the child flows node→node; an inner end event bubbles the scope
+to completion), so resolution is a per-state mapping, not a reconstruction. Token identity = `(instanceId,
+nodeId)`; a process/scope-level token (no `nodeId`) keys on `processId`. Loops / sub-process nesting are
+handled by the animation service. Not yet: an **error icon** for `FAILING` (a bpmn-js-animation effect,
+TODO), gateways fork/join, multi-instance / event-sub-process children (own `instanceId` via
+`parent^node#k`), and message visualisation.
 
 **The engine is already compiled to wasm.** `bpmnos-wasm` (sibling repo, below) now compiles the C++
 engine to WebAssembly, exposes an interactive JavaScript API, and publishes the built module to its

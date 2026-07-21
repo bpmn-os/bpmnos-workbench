@@ -1,0 +1,62 @@
+/* The two-pane layout is owned by bpmn-js-side-panel (it stamps .bjs-layout on the .bpmn-ui wrapper and
+ * sizes both panes). The app only needs the page to have a height so .bjs-layout can fill it. */
+body,
+html {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+
+  height: 100%;
+  max-height: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+/* app identity injected into the side-panel header slot: wordmark left, GitHub link right */
+.wb-brand {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wb-brand-name {
+  font-weight: 600;
+  color: var(--bjs-grey-15);
+}
+
+.wb-brand-gh {
+  color: rgb(64, 64, 64); /* the bpmn.io logo grey */
+  font-size: 18px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.wb-brand-gh:hover {
+  color: var(--bjs-accent);
+}
+
+/* Move bpmn-js drill-down breadcrumbs (the "Process › Sub-Process" trail) to the bottom-left corner. */
+.bjs-breadcrumbs {
+  top: auto;
+  left: 20px !important;
+  bottom: 10px !important;
+}
+
+/* One-shot error effect (R1: a FAILING token emits an error icon), triggered from EngineLogPlayer via
+   primitives.playTokenEffect(node, label, 'error') — a red ring flashes out from the token dot. Matches
+   bpmn-js-animation's `.bts-token-count.bts-once-<effect>` convention. */
+.bts-token-count.bts-once-error {
+  animation: bts-once-error 0.8s ease-out;
+}
+
+@keyframes bts-once-error {
+  0% {
+    box-shadow: 0 0 0 0 rgba(219, 40, 40, 0.85);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(219, 40, 40, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(219, 40, 40, 0);
+  }
+}

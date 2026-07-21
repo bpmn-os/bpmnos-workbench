@@ -1,0 +1,40 @@
+{
+  "name": "bpmnos-workbench",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A BPMN-OS workbench for optimization and simulation",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs"
+  },
+  "author": {
+    "name": "Asvin Goel"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@bpmn-io/properties-panel": "^3.46.0",
+    "bpmn-js": "^18.19.0",
+    "bpmn-js-animation": "github:bpmn-os/bpmn-js-animation#3a73f2c31054028a0aa9a778e6e72b3e8157114c",
+    "bpmn-js-bpmnlint": "^0.24.0",
+    "bpmn-js-properties-panel": "^5.60.0",
+    "bpmn-js-side-panel": "github:bpmn-os/bpmn-js-side-panel#6f4fcdb79bf0d99cf10052ff9a77083d39c2618b",
+    "bpmn-workbench": "github:bpmn-os/bpmn-workbench#17bf1e72c9321f2a69712e9737064abc73ef3c31",
+    "bpmnos-js": "github:bpmn-os/bpmnos-js#e4265dc5f9c8f6d80a80bb3143cd84061c8ad2e2",
+    "bpmnlint": "^10.3.0",
+    "bpmnlint-utils": "^1.1.1",
+    "diagram-js": "^15.18.0",
+    "inherits": "^2.0.4",
+    "min-dom": "^5.0.0",
+    "tiny-svg": "^4.1.4"
+  },
+  "devDependencies": {
+    "less": "^4.6.7",
+    "vite": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

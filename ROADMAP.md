@@ -273,7 +273,7 @@ spatial/instance claims. (For the record, `bpmn-js-animation` doesn't traverse m
 - **Separation.** The envelope-stack/+k widget is generic (candidate for `bpmn-js-animation` or a small
   shared canvas widget); the message data + selection wiring is workbench-side.
 
-### R5 · Decisions panel for manual simulation (drives F.3–F.5)
+### R5 · Decisions panel for manual simulation (drives E.3–E.5)
 
 Manual simulation is the **highest-requirement** work and comes **last** — it needs the live Controller
 loop plus the user-made **contested** decisions (non-sequential entries/exits and direct messages
@@ -287,11 +287,11 @@ Decisions panel** with three sections:
 
 The Choices and Message Deliveries sections list `getPendingDecisions()` items; acting on one calls the
 matching `enqueue…Decision(...)` then `resume()`. GUI detail is workbench-side; the panel reuses the
-`bpmn-js-side-panel` expandable-entry primitive (D.1 + E.1–E.5 / R2). Verify the exact sequential-entry/
+`bpmn-js-side-panel` expandable-entry primitive (the bpmn-js-side-panel entry, R2). Verify the exact sequential-entry/
 performer semantics against the engine (`token_flow_logic_*` + `SequentialPerformerUpdate`) when building
-F.5.
+E.5.
 
-### R6 · Performers panel — the Performer-Sequence decision UI (refines R5; drives E.1–E.5 scope)
+### R6 · Performers panel — the Performer-Sequence decision UI (refines R5; drives the bpmn-js-side-panel entry’s features)
 
 A dedicated **Performers** panel (manual mode) for sequential-entry decisions. It shows a **collapsible
 group per performer** that currently holds a token in **BUSY** (actively performing):
@@ -315,13 +315,13 @@ group per performer** that currently holds a token in **BUSY** (actively perform
   so a programmatic sort is just another way it sets it; **no new side-panel requirement**. Out of scope until R10
   lands.
 
-**Impact on the side-panel primitive (D.1 + E.1–E.5).** The collapsible-entry primitive must support, beyond basic
+**Impact on the side-panel primitive (the bpmn-js-side-panel entry).** The collapsible-entry primitive must support, beyond basic
 expand/collapse: (1) a **per-entry controls slot** — action icons (trash) + **up/down reorder toggles**
 (with a reorder callback; reorder logic stays consumer-side); (2) **non-expandable entries that still
 carry controls** (the marker); (3) **nesting** — a collapsible group whose expanded content is itself a
 list of collapsible entries plus the marker; (4) a shareable **collapsed-summary renderer** (a
 performer's collapsed view *is* a token's). Mirror properties-panel's `ListGroup`/`ListEntry` (which have
-add/remove) where possible; **up/down reorder is the net-new bit**. Design D.1/E.1–E.5 to this richer shape
+add/remove) where possible; **up/down reorder is the net-new bit**. Design the bpmn-js-side-panel entry to this richer shape
 from the start.
 
 ### R7 · Message Deliveries panel — the message-delivery decision UI (refines R5)
@@ -416,7 +416,7 @@ Tokens panel *or on the canvas* — routes to the relevant decision panel, focus
 
 Implications:
 - **A "check"/confirm action icon** on decision entries (Choices token entry, Message-Deliveries recipient
-  token entry) commits the decision — another action in **the side-panel controls slot (E.1)** (alongside trash, up/down).
+  token entry) commits the decision — another action in **the side-panel controls slot (bpmn-js-side-panel)** (alongside trash, up/down).
 - **Cross-panel routing** = select the token + `sidePanel.activate(<decisionPanel>)` + set that panel's
   **"selected" filter** + focus the input. The routing target is BPMNOS-specific → workbench-side.
 - **Double-click hook:** if the Tokens panel reuses `bpmn-js-animation`'s TokenPanel, its double-click
@@ -434,10 +434,10 @@ Extension direction: decisions may carry **dynamic information** — e.g. a **he
 decision's value** — that changes as state evolves. So **decision entries must not be assumed static**;
 their summary/content can update live.
 
-- **Design implication for the side-panel primitive (D.1/E.3):** the collapsible-entry primitive must support
+- **Design implication for the side-panel primitive (bpmn-js-side-panel entry):** the collapsible-entry primitive must support
   **in-place updates** of an entry's summary and content (re-render on data change) **without losing
   expand/collapse state, focus, scroll position, or an input in progress**. Design the API for update, not
-  render-once — D.1/E.3 must not lock in a static structure.
+  render-once — the bpmn-js-side-panel entry must not lock in a static structure.
 - **Source (future bridge):** the heuristic/value would come from the engine's `Evaluator` (e.g.
   `GuidedEvaluator` reward), not currently exposed by `getPendingDecisions`/`getChoiceCandidates` — a
   future modest bridge addition (per-candidate score). Out of scope for the core work packages.
@@ -464,7 +464,7 @@ Where it speeds up design, a task may build and visually validate its UI against
 real data handler or wasm interface exists — listed as a temporary assumption naming the task that
 replaces it. This lets a UI task land and be checked before its data source, so a data-source
 prerequisite is "soft": needed for live data, not for the UI shell. For example, the decision panels
-(F.3–F.5), the Tokens and Messages panels (D.3, D.4), and the evaluation display (G.3) can be prototyped
+(E.3–E.5), the Tokens and Messages panels (D.3, D.4), and the evaluation display (F.3) can be prototyped
 on mock candidates, tokens, and values first.
 
 ### Work package A — the app runs and the engine streams
@@ -494,14 +494,14 @@ on mock candidates, tokens, and values first.
 **B.2 · Map token states to animation (activities)** — *bpmnos-workbench*
 - **Goal:** Turn the engine's token log into on-diagram animation instructions, starting with activities.
 - **Prerequisites:** B.1.
-- **Temporary assumptions:** Only activities are mapped; other node types are handled naively until G.1.
+- **Temporary assumptions:** Only activities are mapped; other node types are handled naively until F.1.
 - **Details:** Write a pure function that maps the engine's token stream to animation instructions per R1 for activities, handling forks and joins, token creation and consumption, and keying each token by its instance id (with the `#k` and `^EventSub` sub-scope conventions).
 - **Validation:** A `node --test` suite maps recorded engine fixtures to the expected instructions (and it is seen on the canvas via B.3).
 
 **B.3 · Greedy playback on the diagram** — *bpmnos-workbench*
 - **Goal:** See a greedy run animate on the diagram — the first real playback.
 - **Prerequisites:** A.2, B.2.
-- **Temporary assumptions:** Only greedy runs at default speed; loading a log comes in C.5, manual simulation in F.1, and the transport in C.4.
+- **Temporary assumptions:** Only greedy runs at default speed; loading a log comes in C.5, manual simulation in E.1, and the transport in C.4.
 - **Details:** Feed the greedy run's stream (A.2) through the mapping (B.2) into bpmn-js-animation's existing `Playback`.
 - **Validation:** Click Run and watch tokens animate through a greedy run on the diagram.
 
@@ -516,7 +516,7 @@ on mock candidates, tokens, and values first.
 **C.2 · The three-mode toggle bar** — *bpmnos-workbench*
 - **Goal:** Put the Manual, Greedy, and Playback toggles on the canvas and switch between them.
 - **Prerequisites:** A.1, C.1.
-- **Temporary assumptions:** The Manual toggle is inert until F.1, and Playback replays the greedy stream until loading a log arrives in C.5.
+- **Temporary assumptions:** The Manual toggle is inert until E.1, and Playback replays the greedy stream until loading a log arrives in C.5.
 - **Details:** Add the on-canvas toggle bar (hand-pointer, microchip, and play icons) using C.1, and highlight the active source when greedy and playback share a mode.
 - **Validation:** Three toggles appear on the canvas; switching to Greedy runs a playback (B.3) and the others are stubbed.
 
@@ -530,7 +530,7 @@ on mock candidates, tokens, and values first.
 **C.4 · Transport control** — *bpmnos-workbench*
 - **Goal:** Give playback a play/pause and speed control, plus an on-canvas simulation-time readout.
 - **Prerequisites:** B.3.
-- **Temporary assumptions:** Paces animation only; the live manual clock comes in F.2.
+- **Temporary assumptions:** Paces animation only; the live manual clock comes in E.2.
 - **Details:** Reuse bpmn-js-animation's speed slider and `Playback` for play, pause, and speed, and add an on-canvas time chip fed by the engine's current time and the log's timestamps.
 - **Validation:** Play, pause, and change the speed of a greedy playback, and watch the time chip update.
 
@@ -540,28 +540,27 @@ on mock candidates, tokens, and values first.
 - **Details:** Play a loaded engine log through the B.3 pipeline, and save a run's log to a file. The log file is the engine's native array of token, event, and message entries.
 - **Validation:** Load a log and watch tokens animate; save a greedy run and reload it.
 
-### Work package D — the shared side-panel entry and the observation panels
+### Work package D — the observation panels
 
-**D.1 · Collapsible side-panel entry, adopted across the ecosystem** — *bpmn-js-side-panel* + *bpmn-workbench* (upstream)
-- **Goal:** Build the reusable collapsible entry every panel uses, and bring the existing ecosystem onto it so the whole side-panel experience is consistent.
-- **Prerequisites:** None.
-- **Temporary assumptions:** The entry has no action buttons, reordering, nesting, filter, or live updates yet; those are added in E.1–E.5.
-- **Details:** Add a collapsible entry to bpmn-js-side-panel — a collapsed summary with optional expandable content, expandable only when content is supplied — matching @bpmn-io/properties-panel's collapsible entry in look and API, in plain DOM (R2). In the same effort, migrate bpmn-workbench's Issues panel onto this entry (preserving its severity icons, per-element grouping, and "Show issues" toggle), so bpmn-workbench and the workbench share one entry style rather than diverging.
-- **Validation:** The side-panel demo shows an entry expanding and collapsing and a content-less entry as a plain row; and bpmn-workbench's Issues panel, migrated onto it, behaves identically, matches the properties-panel style, and still passes its lint tests.
+**D.1 · Adopt the side-panel collapsible entry (and migrate bpmn-workbench Issues)** — *bpmnos-workbench* + *bpmn-workbench*
+- **Goal:** Use the shared collapsible side-panel entry for the app's panels, and bring bpmn-workbench onto it too, so the whole side-panel experience is consistent.
+- **Prerequisites:** The collapsible entry and its features, built upstream in **bpmn-js-side-panel** (see that repo's ROADMAP — entry core, action buttons, reorder, live updates, nesting, filter; the workbench pins it by commit).
+- **Details:** Render the app's panels on the shared collapsible entry from bpmn-js-side-panel. In the same effort, migrate bpmn-workbench's Issues panel onto the entry (preserving its severity icons, per-element grouping, and "Show issues" toggle), so bpmn-workbench and the workbench share one entry style rather than diverging.
+- **Validation:** The app's panels render on the shared entry; and bpmn-workbench's Issues panel, migrated onto it, behaves identically, matches the properties-panel style, and still passes its lint tests.
 
 **D.2 · Reactive value store** — *bpmnos-workbench*
 - **Goal:** Keep a live in-memory copy of the engine's values — globals, per-scope data, and per-token status — for the panels to read.
 - **Prerequisites:** A.2.
 - **Open decisions:** How should per-scope data be keyed along the scope hierarchy?
-- **Temporary assumptions:** The store refreshes only when a token entry arrives; live data updates come in G.2.
+- **Temporary assumptions:** The store refreshes only when a token entry arrives; live data updates come in F.2.
 - **Details:** Maintain a store fed by the stream, mirroring the engine's shared-reference model (R2), so each value lives once and every view of it stays consistent.
 - **Validation:** A debug view shows the store updating during a run.
 
 **D.3 · Tokens panel** — *bpmnos-workbench*
 - **Goal:** Show each token's full decision context — its status, its hierarchy-visible data, and the globals — in one place.
 - **Prerequisites:** D.1, D.2.
-- **Temporary assumptions:** Uses a local filter (replaced by E.5); re-rendering may collapse an expanded entry until E.3; and data and globals refresh only on token advance until G.2.
-- **Details:** Render each token as an entry (D.1) showing its status plus the data visible up its scope chain and the globals, read from the store (D.2), with an all/selected filter.
+- **Temporary assumptions:** Data and globals refresh only on token advance until F.2.
+- **Details:** Render each token as an entry (D.1) showing its status plus the data visible up its scope chain and the globals, read from the store (D.2), with the side-panel entry's all/selected filter and live in-place updates.
 - **Validation:** Expand a token to see its status, data, and globals; watch them update through a run; and use the filter.
 
 **D.4 · Messages panel** — *bpmnos-workbench*
@@ -570,93 +569,60 @@ on mock candidates, tokens, and values first.
 - **Details:** List each message as an entry (D.1) whose collapsed summary shows its origin, name, and sender (with the delivery state as a pill) and which expands to its content (R3).
 - **Validation:** Run a model with messages and see them listed; expand one to read its content.
 
-### Work package E — richer side-panel entries (for decisions and live updates)
+### Work package E — interactive (manual) simulation
 
-**E.1 · Entry action buttons** — *bpmn-js-side-panel* (upstream)
-- **Goal:** Let side-panel entries carry action buttons such as confirm and delete.
-- **Prerequisites:** D.1.
-- **Details:** Add a per-entry controls area for action icons (confirm, delete), available even on non-expandable entries, with the consumer supplying the handlers.
-- **Validation:** A demo entry fires its confirm and delete actions, and a non-expandable entry still shows its controls.
-
-**E.2 · Reorder entries** — *bpmn-js-side-panel* (upstream)
-- **Goal:** Let the user reorder a list of entries with up and down controls.
-- **Prerequisites:** E.1.
-- **Details:** Add standard up/down controls that emit a reorder callback and disable at the list ends, keyboard-accessible; the consumer owns the ordered data and what the order means.
-- **Validation:** A demo list reorders on up/down, reports the new order, and disables the controls at the ends.
-
-**E.3 · Live entry updates** — *bpmn-js-side-panel* (upstream)
-- **Goal:** Let an entry's contents update live without losing its expanded or focused state.
-- **Prerequisites:** D.1.
-- **Details:** Update an entry's summary and content in place without losing its expanded/collapsed state, focus, scroll position, or any input in progress (R10).
-- **Validation:** A demo updates an entry's content while it stays expanded and focused.
-
-**E.4 · Nested entry groups** — *bpmn-js-side-panel* (upstream)
-- **Goal:** Let an entry contain a nested list of entries.
-- **Prerequisites:** D.1.
-- **Details:** Support a collapsible group whose expanded content is itself a list of entries.
-- **Validation:** A demo group expands to reveal a sub-list of entries.
-
-**E.5 · All/selected filter** — *bpmn-js-side-panel* (upstream)
-- **Goal:** Give an entry list an "all versus selected" filter.
-- **Prerequisites:** D.1.
-- **Temporary assumptions:** Replaces the local filter in D.3.
-- **Details:** Add a reusable filter header offering "all" or "selected" for an entry list.
-- **Validation:** A demo toggles between all and selected.
-
-### Work package F — interactive (manual) simulation
-
-**F.1 · Interactive control and pending decisions** — *bpmnos-workbench*
+**E.1 · Interactive control and pending decisions** — *bpmnos-workbench*
 - **Goal:** Run the engine interactively: pause at decisions and surface what is pending.
 - **Prerequisites:** A.2, C.3.
-- **Temporary assumptions:** Decisions are shown raw until the dedicated panels (F.3–F.6); there is no clock yet, added in F.2.
+- **Temporary assumptions:** Decisions are shown raw until the dedicated panels (E.3–E.6); there is no clock yet, added in E.2.
 - **Details:** Attach a `Controller`, drive the worker's resume loop, and surface the pending decisions (from `getPendingDecisions` and the decision-request stream entries) in raw form, with a debug control to enqueue a decision and resume.
 - **Validation:** In manual mode the run pauses at the first decision, the pending decisions are listed, and the debug control advances it.
 
-**F.2 · Manual clock** — *bpmnos-workbench*
+**E.2 · Manual clock** — *bpmnos-workbench*
 - **Goal:** Let the user drive simulated time in manual mode with play and pause, paced by the animation.
-- **Prerequisites:** F.1, C.4.
+- **Prerequisites:** E.1, C.4.
 - **Details:** Advance simulated time by enqueuing clock-tick events in an animation-gated loop — after each tick, animate the resulting entries, then fire the next tick after the greater of the chosen dwell and the time the animation takes — so time never outruns the animation; pause holds time.
 - **Validation:** In manual mode, play advances the simulation time (gated by the animation) and pause holds it.
 
-**F.3 · Choices panel** — *bpmnos-workbench*
+**E.3 · Choices panel** — *bpmnos-workbench*
 - **Goal:** Let the user make a decision-task choice: pick a value and commit it.
-- **Prerequisites:** D.3, E.1, E.3, F.1.
+- **Prerequisites:** D.1, D.3, E.1.
 - **Open decisions:** Should the choice attribute's type come from a small bridge addition or be read from the model? (A bridge addition is preferred.)
-- **Temporary assumptions:** No evaluation is shown yet; added in G.3.
+- **Temporary assumptions:** No evaluation is shown yet; added in F.3.
 - **Details:** For each token waiting at a decision task, show an entry (reusing the token renderer) with an enumeration drop-down or a number input whose min, max, and step are set from the candidate bounds per the type (R8); a confirm button enqueues the choice and resumes.
 - **Validation:** Pick a value at a decision task, confirm, and watch the engine advance and animate.
 
-**F.4 · Message Deliveries panel** — *bpmnos-workbench*
+**E.4 · Message Deliveries panel** — *bpmnos-workbench*
 - **Goal:** Let the user choose which message is delivered to which recipient.
-- **Prerequisites:** D.3, E.1, E.4, E.5, F.1.
-- **Temporary assumptions:** No evaluation-based sorting yet; added in G.3.
-- **Details:** Show each deliverable message as a group (E.4) — an envelope with a bullet in the sending token's colour — that expands to its candidate recipient tokens; a confirm button on a recipient enqueues the delivery and resumes; a filter limits the list to messages deliverable to the selected token (R7).
+- **Prerequisites:** D.1, D.3, E.1.
+- **Temporary assumptions:** No evaluation-based sorting yet; added in F.3.
+- **Details:** Show each deliverable message as a nested group (from the side-panel entry) — an envelope with a bullet in the sending token's colour — that expands to its candidate recipient tokens; a confirm button on a recipient enqueues the delivery and resumes; a filter limits the list to messages deliverable to the selected token (R7).
 - **Validation:** Pick a recipient, confirm, and watch the message delivered and animated.
 
-**F.5 · Performers panel** — *bpmnos-workbench*
+**E.5 · Performers panel** — *bpmnos-workbench*
 - **Goal:** Let the user set the order in which a sequential performer's activities are entered, with automatic advance.
-- **Prerequisites:** D.3, E.1, E.2, E.4, F.1.
-- **Temporary assumptions:** No evaluation-based sorting yet; added in G.3.
-- **Details:** Show each busy performer as a group (E.4) holding an ordered list of the tokens waiting to enter it, followed by an "auto-advance" marker (deletable via E.1) that can be moved with the others (E.2); tokens above the marker have their entry enqueued automatically, in order, and deleting the marker makes all of them advance (R6). Before building, confirm the exact sequential-performer semantics against the engine (`token_flow_logic_*` and `SequentialPerformerUpdate`).
+- **Prerequisites:** D.1, D.3, E.1.
+- **Temporary assumptions:** No evaluation-based sorting yet; added in F.3.
+- **Details:** Show each busy performer as a nested group (from the side-panel entry) holding an ordered list of the tokens waiting to enter it, followed by an "auto-advance" marker (deletable) that can be moved with the others via the entry’s reorder controls; tokens above the marker have their entry enqueued automatically, in order, and deleting the marker makes all of them advance (R6). Before building, confirm the exact sequential-performer semantics against the engine (`token_flow_logic_*` and `SequentialPerformerUpdate`).
 - **Validation:** Reorder the list, watch the marker's cutoff auto-advance the tokens above it, and delete the marker to advance all.
 
-**F.6 · Double-click to act on a decision** — *bpmnos-workbench* (+ *bpmn-js-animation*)
+**E.6 · Double-click to act on a decision** — *bpmnos-workbench* (+ *bpmn-js-animation*)
 - **Goal:** Double-click a token, in a panel or on the canvas, to jump straight to and act on its decision.
-- **Prerequisites:** F.3, F.4, F.5.
+- **Prerequisites:** E.3, E.4, E.5.
 - **Open decisions:** When tokens are stacked at a node, which one does a canvas double-click target?
 - **Details:** Double-clicking a token (in the Tokens panel or on the canvas) opens its decision panel, focused and filtered to that token (R9). The canvas case needs a token double-click event added upstream in bpmn-js-animation.
 - **Validation:** Double-click a decision-task token to open the Choices panel focused on it; double-click a receiving token to open Message Deliveries filtered to it.
 
-### Work package G — richer mapping and extensions (later)
+### Work package F — richer mapping and extensions (later)
 
-**G.1 · Animation for the remaining node types** — *bpmnos-workbench* (+ *bpmn-js-animation*)
+**F.1 · Animation for the remaining node types** — *bpmnos-workbench* (+ *bpmn-js-animation*)
 - **Goal:** Extend the animation to gateways, events, sub-processes, multi-instance activities, and boundary events.
 - **Prerequisites:** B.1, B.2.
 - **Temporary assumptions:** Replaces the activities-only mapping of B.2.
 - **Details:** Extend the B.2 mapping beyond activities, following each node type's `token_flow_logic_*` document.
 - **Validation:** Those constructs animate correctly.
 
-**G.2 · Live data and globals updates** — *bpmnos-wasm* (+ *bpmnos-workbench*)
+**F.2 · Live data and globals updates** — *bpmnos-wasm* (+ *bpmnos-workbench*)
 - **Goal:** Make data and globals update live in the panels while tokens sit still.
 - **Prerequisites:** D.2.
 - **Open decisions:** How should the changed values reach the workbench — serialise them on the bridge, add a query the workbench calls on the signal, or re-emit the affected token?
@@ -664,14 +630,14 @@ on mock candidates, tokens, and values first.
 - **Details:** The engine's `DataUpdate` observable carries only which attributes changed, with no values and no serialiser (verified), so the chosen route must supply the current values, which then feed the store (D.2).
 - **Validation:** Data and globals in the Tokens panel update while a token is stationary.
 
-**G.3 · Decision evaluations** — *bpmnos-wasm* (+ *bpmnos-workbench*)
+**F.3 · Decision evaluations** — *bpmnos-wasm* (+ *bpmnos-workbench*)
 - **Goal:** Show the engine's evaluation of decisions, sort candidates by it, and preview a choice's value before committing.
-- **Prerequisites:** E.3, F.3, F.4, F.5.
+- **Prerequisites:** D.1, E.3, E.4, E.5.
 - **Open decisions:** What bridge surface should expose each candidate's reward and the what-if evaluation of an uncommitted choice?
-- **Details:** Expose each candidate's evaluation (the evaluator's reward) and a what-if evaluation of an uncommitted choice through the bridge; show these in the decision entries (updating in place, E.3), sort the Performers and Message-Deliveries candidates by value, and update a choice's evaluation live as the user changes the selection (R10, and the extensions noted in R6, R7, R8).
+- **Details:** Expose each candidate's evaluation (the evaluator's reward) and a what-if evaluation of an uncommitted choice through the bridge; show these in the decision entries (updating in place), sort the Performers and Message-Deliveries candidates by value, and update a choice's evaluation live as the user changes the selection (R10, and the extensions noted in R6, R7, R8).
 - **Validation:** Decision entries show an evaluation, candidate lists sort by it, and a choice shows the evaluation of the selected value before it is confirmed.
 
-**G.4 · On-canvas message tray (optional)** — *bpmnos-workbench*
+**F.4 · On-canvas message tray (optional)** — *bpmnos-workbench*
 - **Goal:** Show an at-a-glance count of in-flight messages on the canvas.
 - **Prerequisites:** D.4.
 - **Temporary assumptions:** Optional extension, not a core deliverable.
@@ -681,7 +647,7 @@ on mock candidates, tokens, and values first.
 ## App files (created by the tasks above)
 
 `package.json`, `vite.config.js` (preact-jsx + wasm asset), `index.html`, `src/app.js`,
-`src/worker.js` (engine driver), `src/adapter/*` (B.2), `src/clock/*` (F.2),
+`src/worker.js` (engine driver), `src/adapter/*` (B.2), `src/clock/*` (E.2),
 `.github/workflows/deploy.yml`, `test/`. Upstream changes (per the design principle) land in
 `bpmn-js-animation` (positions/effects), `bpmn-js-side-panel` (expandable-entry primitive), and
 `bpmn-workbench` (`mode-buttons`/`Mode` generalization).
