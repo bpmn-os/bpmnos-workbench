@@ -7,12 +7,53 @@ to WebAssembly and exposes a tested interactive JS API (`Engine`/`Monitor`/`Cont
 `BPMNOS::WASM`; all four decision kinds implemented). So the entire engine↔wasm bridge is **done
 upstream and owned there**; `bpmnos-wasm` has its own ROADMAP.
 
-This roadmap covers only the **`bpmnos-workbench`** (still bare: README + LICENSE + CLAUDE.md). Its job:
-a production web app that **consumes the wasm module** to play back and simulate real BPMN-OS processes.
-The remaining work is the app scaffold, the **engine-token → animation mapping**, a **clock/transport
-control**, the **observation panels**, and **interactive (manual) simulation**. The cross-repo interface
-is the engine's own `jsonify` stream; the animation translation is internal to the workbench (both
-CLAUDE.mds fix this boundary).
+This roadmap covers only the **`bpmnos-workbench`**. Its job: a production web app that **consumes the
+wasm module** to play back and simulate real BPMN-OS processes. The cross-repo interface is the engine's
+own `jsonify` stream; the animation translation is internal to the workbench (both CLAUDE.mds fix this
+boundary).
+
+## Status (2026-07-21)
+
+**Playback and greedy simulation are built and working.** The app scaffold, the engine-token → animation
+mapping, and the live wasm greedy run are done; the **clock/transport for the live manual clock**, the
+**observation panels** (Tokens/Messages richer views), and **interactive (manual) simulation** remain.
+
+Mapped onto the work packages below:
+
+- **Done:** A.1 (scaffold), A.2 (engine in a worker), B.2 (token→animation mapping — activities *and*, in
+  practice, gateways/events/sub-processes/**multi-instance**/**event-sub-processes** natively), B.3
+  (greedy playback on the diagram), C.3 (Input — a collapsible entry, lookup pickers via
+  `getLookupTableNames` labelled by each table's `source` filename, stochastic provider, fresh random seed
+  per run).
+- **Partial:** C.2 (mode bar — **greedy** `microchip` + **playback** `play` toggles exist; **manual**
+  `hand-pointer` not yet), C.4 (transport — reuses the TokenPanel play/pause/speed; **no on-canvas time
+  chip** yet), C.5 (Load log works via the TokenPanel; save-log not wired).
+- **Not started:** work packages **D** (observation panels beyond the packaged Tokens tab), **E**
+  (interactive/manual simulation — the `Controller` loop, clock, decision panels), **F** (F.2/F.3
+  extensions; F.1 largely subsumed since the mapping already covers most node types).
+
+**Deviations from the original plan (intentional):**
+- **B.1 was not needed as written.** Rather than adding new *positions* (arrival/ready/departure) to
+  `bpmn-js-animation`, the R1 states map onto the **existing** positions natively — `ARRIVED`/`DEPARTED`
+  rest on / travel the sequence flow, `READY` is entry+pulse — so no new position primitives were added.
+  What the lib *did* gain is a **hosting/transport API** (not in the original plan): `playback.setLogSource`,
+  `tokenPanel.addControl`, the `tokenPanel.refresh` event, `animation.isAutoFocus`/`whenEntered`, plus
+  token-creation ordering (born-hidden + deferred entrance = scroll→create→flip) and **per-context stacks**
+  (stacked children keyed by their own instance's ancestor context — required for MI/event-sub under
+  several enclosing instances, e.g. many process instances).
+- **C.1 was not done** — the workbench carries its **own** on-canvas `mode-buttons` (copied from
+  bpmn-workbench, converted to inline SVG) rather than generalising bpmn-workbench's `Mode` for N modes.
+  Greedy is a **source** (not a 4th animation mode): it rides the `playback` mode and drives the shared
+  TokenPanel transport via `setLogSource`.
+- **Greedy runs as a burst.** `Engine.run` blocks and its `Monitor` entries arrive all at once in the
+  worker; the whole log is collected and then replayed through the player (rather than streamed
+  entry-by-entry). Matches the transport table below (greedy = animation replay of a completed log).
+- **The engine's MI token logic was revised upstream** (each instance emits `CREATED` up front + its own
+  `READY` + a terminal `DONE`; the main emits neither) so sequential and parallel MI both fall onto the
+  animation lib's existing parallel-spawn + fan-in model — no workbench-side MI special-casing.
+
+The remaining work (below) is the app's clock/transport polish, the observation panels, and interactive
+(manual) simulation.
 
 ## The bpmnos-wasm API the workbench consumes (contract)
 
@@ -57,13 +98,15 @@ numbers/strings.
   instantiation, so terminating needs `enqueueClockTickEvent()`. Autonomous (null controller): `run(0)`
   proceeds to completion on its own.
 
-**Consumption caveats (feed into A.2):**
-- **`dist` may not be published**; until it is, A.2 consumes the locally built
-  `bpmnos-wasm/build-wasm/bpmnos.{mjs,wasm}` (a `file:`/path dep); switch to `#dist` once CI publishes.
-- **Vite must emit/serve `bpmnos.wasm` as a separate asset** (the `.mjs` fetches it relative to itself;
-  do not inline). Handle via `?url`/asset config; the worker needs the `.wasm` beside the glue.
-- **Run the Engine in a Web Worker** (`run`/`resume` block); the `Monitor` observer posts each entry to
-  the page in order. Mirror `bpmnos-wasm/demo/worker.mjs`.
+**Consumption caveats (resolved in A.2):**
+- **`dist` is published and consumed** as `@bpmn-os/bpmnos-wasm` (`github:bpmn-os/bpmnos-wasm#dist`); the
+  branch is CI-rebuilt against the engine, so `npm install` refreshes it. (Reinstall after an engine
+  revision — e.g. the MI token-logic change.)
+- **Vite serves `bpmnos.wasm` as a separate asset** — the worker resolves it via
+  `new URL('bpmnos.wasm', import.meta.url)`, and `@bpmn-os/bpmnos-wasm` is **excluded from `optimizeDeps`**
+  in `vite.config.js` so the glue's relative wasm URL survives (do not inline).
+- **The Engine runs in a Web Worker** (`src/greedy/engine-worker.js`; `run`/`resume` block). Greedy is
+  autonomous (null controller) and its `Monitor` entries arrive in one burst, collected and replayed.
 
 ## Modes & toggles (three animation modes)
 
@@ -471,6 +514,7 @@ on mock candidates, tokens, and values first.
 
 **A.1 · App scaffold** — *bpmnos-workbench*
 - **Goal:** Get a working BPMNOS diagram editor on screen: open the app and edit a process.
+- **Status:** Done.
 - **Prerequisites:** None.
 - **Temporary assumptions:** There is no mode bar yet, only model (editing) mode; it is added in C.2. The wasm module is not consumed yet; that is A.2.
 - **Details:** Stand up the Vite app that mirrors bpmn-workbench and bpmnos-js — the bpmn-js modeller with the BPMNOS extension, the side panel, the Issues panel, and the toolbar — so a model can be edited.
@@ -478,6 +522,7 @@ on mock candidates, tokens, and values first.
 
 **A.2 · Run the engine in the browser** — *bpmnos-workbench*
 - **Goal:** Prove the wasm engine runs in the browser: click Run and watch its execution log stream in.
+- **Status:** Done (greedy worker streams the `Monitor` log; consumed as a **burst** and replayed, not shown as raw JSON).
 - **Prerequisites:** A.1.
 - **Temporary assumptions:** The instance data and provider are hardcoded, replaced by the Input panel in C.3; and the stream is shown as raw JSON with no animation, added in B.3. The app consumes the locally built wasm module as a path dependency until the `dist` branch is published.
 - **Details:** In a Web Worker, load `createBPMNOS()`, build an `Input`, a `Monitor`, and an `Engine` with no controller (a greedy run), call `run(0)`, and forward every `Monitor` entry to the page as raw text. Serve `bpmnos.wasm` as a separate Vite asset, since the JavaScript glue fetches it at runtime.
@@ -487,12 +532,14 @@ on mock candidates, tokens, and values first.
 
 **B.1 · Animation positions and effects** — *bpmn-js-animation* (upstream)
 - **Goal:** Give the animation library the token positions and effects that BPMNOS needs.
+- **Status:** Not done as written — the R1 states map onto the lib's existing positions natively; the lib instead gained a hosting/transport API + per-context stacks (see top Status deviations).
 - **Prerequisites:** None.
 - **Details:** Add the arrival, ready, and departure positions (beyond the existing entry, busy, and completion) and the flip, pulse, bounce, fade, and error effects to bpmn-js-animation, exactly as the token lifecycle in R1 specifies (R1 fixes each position and effect).
 - **Validation:** The library's own demo shows a token at each new position and performing each effect.
 
 **B.2 · Map token states to animation (activities)** — *bpmnos-workbench*
 - **Goal:** Turn the engine's token log into on-diagram animation instructions, starting with activities.
+- **Status:** Done in `src/playback/EngineLogPlayer.js` — activities and, natively, gateways/events/sub-processes/multi-instance/event-sub-processes.
 - **Prerequisites:** B.1.
 - **Temporary assumptions:** Only activities are mapped; other node types are handled naively until F.1.
 - **Details:** Write a pure function that maps the engine's token stream to animation instructions per R1 for activities, handling forks and joins, token creation and consumption, and keying each token by its instance id (with the `#k` and `^EventSub` sub-scope conventions).
@@ -500,6 +547,7 @@ on mock candidates, tokens, and values first.
 
 **B.3 · Greedy playback on the diagram** — *bpmnos-workbench*
 - **Goal:** See a greedy run animate on the diagram — the first real playback.
+- **Status:** Done.
 - **Prerequisites:** A.2, B.2.
 - **Temporary assumptions:** Only greedy runs at default speed; loading a log comes in C.5, manual simulation in E.1, and the transport in C.4.
 - **Details:** Feed the greedy run's stream (A.2) through the mapping (B.2) into bpmn-js-animation's existing `Playback`.
@@ -509,12 +557,14 @@ on mock candidates, tokens, and values first.
 
 **C.1 · N configurable modes in bpmn-workbench** — *bpmn-workbench* (upstream)
 - **Goal:** Let the app show three mode toggles instead of the built-in two, without forking bpmn-workbench.
+- **Status:** Not done — the workbench carries its own inline-SVG `mode-buttons`; greedy is a *source* on the shared `playback` mode, not a 4th mode.
 - **Prerequisites:** None.
 - **Details:** Generalise bpmn-workbench's mode buttons and `Mode` service so the set of modes is configurable, so a third toggle needs no fork. (Greedy is not a new mode — it shares the playback mode, with the bar tracking the active source, as decided in "Modes & toggles".)
 - **Validation:** The bpmn-workbench demo shows a configurable mode bar.
 
 **C.2 · The three-mode toggle bar** — *bpmnos-workbench*
 - **Goal:** Put the Manual, Greedy, and Playback toggles on the canvas and switch between them.
+- **Status:** Partial — greedy (`microchip`) + playback (`play`) toggles exist; manual (`hand-pointer`) not yet.
 - **Prerequisites:** A.1, C.1.
 - **Temporary assumptions:** The Manual toggle is inert until E.1, and Playback replays the greedy stream until loading a log arrives in C.5.
 - **Details:** Add the on-canvas toggle bar (hand-pointer, microchip, and play icons) using C.1, and highlight the active source when greedy and playback share a mode.
@@ -522,6 +572,7 @@ on mock candidates, tokens, and values first.
 
 **C.3 · Input panel** — *bpmnos-workbench*
 - **Goal:** Let the user supply a run's inputs — instance data, lookup tables, and provider/seed — from a panel.
+- **Status:** Done (as a collapsible **Input** entry in the Tokens tab; lookup pickers labelled by each table's `source` filename; provider fixed to stochastic; fresh random seed per run, re-rolled by the footer Refresh).
 - **Prerequisites:** A.1, A.2.
 - **Temporary assumptions:** Replaces A.2's hardcoded inputs; saving a log comes later, in C.5.
 - **Details:** Add an Input tab with a field for the instance CSV, file pickers for exactly the lookup tables the model references (discovered via `getLookupTableNames`), and provider and seed controls, feeding the run in A.2.
@@ -529,6 +580,7 @@ on mock candidates, tokens, and values first.
 
 **C.4 · Transport control** — *bpmnos-workbench*
 - **Goal:** Give playback a play/pause and speed control, plus an on-canvas simulation-time readout.
+- **Status:** Partial — reuses the TokenPanel play/pause/speed; the on-canvas time chip is not built.
 - **Prerequisites:** B.3.
 - **Temporary assumptions:** Paces animation only; the live manual clock comes in E.2.
 - **Details:** Reuse bpmn-js-animation's speed slider and `Playback` for play, pause, and speed, and add an on-canvas time chip fed by the engine's current time and the log's timestamps.
@@ -536,6 +588,7 @@ on mock candidates, tokens, and values first.
 
 **C.5 · Load and save logs** — *bpmnos-workbench*
 - **Goal:** Load a saved execution log to replay it, and save a run's log.
+- **Status:** Partial — Load log works via the TokenPanel; save-log not wired.
 - **Prerequisites:** B.3, C.2.
 - **Details:** Play a loaded engine log through the B.3 pipeline, and save a run's log to a file. The log file is the engine's native array of token, event, and message entries.
 - **Validation:** Load a log and watch tokens animate; save a greedy run and reload it.
