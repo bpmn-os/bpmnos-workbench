@@ -33,6 +33,7 @@ import ContextPadCompatModule from './context-pad-compat';
 import EnginePlaybackModule from './playback';
 import createGreedy from './greedy';           // greedy simulation: runs the wasm engine live
 import createModeButtons, { modeIcon } from './mode-buttons';
+import createClock from './clock';               // on-canvas simulation clock (top-right)
 
 import newDiagram from './newDiagram.bpmn?raw';
 
@@ -96,6 +97,9 @@ createToolbar(modeler);
 // The on-canvas mode toggles: greedy simulation (microchip, runs the wasm engine) and playback (play).
 const greedy = createGreedy(modeler);
 createModeButtons(modeler, greedy);
+
+// On-canvas simulation clock (top-right): the current clock-tick time, shown during greedy / playback.
+createClock(modeler);
 
 // Optional deep-linking: ?src=<url> loads a diagram on startup.
 const src = new URL(window.location.href).searchParams.get('src');

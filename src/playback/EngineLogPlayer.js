@@ -177,7 +177,7 @@ EngineLogPlayer.prototype.play = async function(log) {
         if (entry.token) {
           await this._applyToken(entry.token);
         } else if (entry.event) {
-          this._applyEvent(entry.event);
+          await this._applyEvent(entry.event);
         }
         // message entries are not visualised yet
       }
@@ -237,10 +237,21 @@ EngineLogPlayer.prototype.toggle = function(log) {
 
 // --- resolution --------------------------------------------------------------
 
-EngineLogPlayer.prototype._applyEvent = function(event) {
-  // the stream interleaves engine events; the clock tick is the one that advances simulated time
-  if (event.event === 'clocktick' && typeof event.timestamp === 'number') {
-    this._setTime(event.timestamp);
+EngineLogPlayer.prototype._applyEvent = async function(event) {
+  // the stream interleaves engine events; the clock tick is the one that advances simulated time. The
+  // engine carries the tick time in `time` (older logs used `timestamp`).
+  if (event.event === 'clocktick') {
+    const t = typeof event.time === 'number' ? event.time : event.timestamp;
+    if (typeof t === 'number') {
+      this._setTime(t);
+      // real-time pause per tick — a quarter of the animation-step duration (~250ms at the 1000ms
+      // default → ~4 ticks/s), so the on-canvas clock is seen counting up while simulated time advances
+      // with no token movement (e.g. a task running its duration).
+      const ms = this._primitives.getAnimationDuration() / 4;
+      if (ms) {
+        await new Promise(resolve => setTimeout(resolve, ms));
+      }
+    }
   }
 };
 

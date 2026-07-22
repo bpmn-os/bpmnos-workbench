@@ -1,0 +1,43 @@
+/* On-canvas simulation clock — top-right: a seven-segment LCD readout + the BPMN timer clock face.
+   Right edge aligns with the toolbar (right: 8px); vcenter aligned to the side-panel header via JS.
+   A light semi-transparent backdrop keeps it legible over the diagram; dark text matches the mode buttons. */
+
+.wb-clock,
+.wb-clock * {
+  box-sizing: border-box;
+}
+
+.wb-clock {
+  position: absolute;
+  top: 20px;    /* fallback — JS aligns the vcenter to the side-panel header */
+  right: 8px;   /* right edge matches the toolbar (also right: 8px) */
+  z-index: 1500; /* above the canvas chrome; pointer-events:none, so it never blocks interaction */
+  font-size: 24px; /* base scale — the 1em clock icon matches the 24px mode-toggle symbols; digits scale with it */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(248, 248, 249, 0.72); /* light, semi-transparent — legible without a heavy chip */
+  color: var(--bpmn-mode-icon, rgb(64, 64, 64)); /* same colour as the mode-button icons */
+  user-select: none;
+  pointer-events: none; /* a passive readout — never intercept canvas interaction */
+}
+
+/* right-aligned seven-segment readout (DSEG7 loaded in clock.js; monospace fallback) */
+.wb-clock-time {
+  font-family: 'DSEG7 Classic', 'Courier New', ui-monospace, monospace;
+  font-size: 1em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+}
+
+/* the clock face sized to the digit height */
+.wb-clock-icon {
+  display: block;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+}

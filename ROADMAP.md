@@ -26,8 +26,9 @@ Mapped onto the work packages below:
   `getLookupTableNames` labelled by each table's `source` filename, stochastic provider, fresh random seed
   per run).
 - **Partial:** C.2 (mode bar — **greedy** `microchip` + **playback** `play` toggles exist; **manual**
-  `hand-pointer` not yet), C.4 (transport — reuses the TokenPanel play/pause/speed; **no on-canvas time
-  chip** yet), C.5 (Load log works via the TokenPanel; save-log not wired).
+  `hand-pointer` not yet), C.4 (transport — reuses the TokenPanel play/pause/speed; the **on-canvas time
+  chip is built** — a top-right seven-segment LCD clock + the bpmn-js timer icon, paced by clock-tick
+  events; the live manual clock, E.2, is not), C.5 (Load log works via the TokenPanel; save-log not wired).
 - **Not started:** work packages **D** (observation panels beyond the packaged Tokens tab), **E**
   (interactive/manual simulation — the `Controller` loop, clock, decision panels), **F** (F.2/F.3
   extensions; F.1 largely subsumed since the mapping already covers most node types).
@@ -580,7 +581,11 @@ on mock candidates, tokens, and values first.
 
 **C.4 · Transport control** — *bpmnos-workbench*
 - **Goal:** Give playback a play/pause and speed control, plus an on-canvas simulation-time readout.
-- **Status:** Partial — reuses the TokenPanel play/pause/speed; the on-canvas time chip is not built.
+- **Status:** Partial — reuses the TokenPanel play/pause/speed; the **on-canvas time chip is built**
+  (`src/clock.js`/`clock.css`): a fixed top-right seven-segment LCD readout (bundled DSEG7 font) + the
+  bpmn-js timer-event clock face, aligned to the mode toggles, showing the engine's clock-tick time.
+  Playback pauses ~animationDuration/4 per `clocktick` (`{event:"clocktick", time}`) so it counts up.
+  Still missing: the **live manual clock** (E.2).
 - **Prerequisites:** B.3.
 - **Temporary assumptions:** Paces animation only; the live manual clock comes in E.2.
 - **Details:** Reuse bpmn-js-animation's speed slider and `Playback` for play, pause, and speed, and add an on-canvas time chip fed by the engine's current time and the log's timestamps.
