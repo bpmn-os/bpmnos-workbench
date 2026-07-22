@@ -165,9 +165,9 @@ EngineLogPlayer.prototype.play = async function(log) {
   }
   this._aborted = false;
   this._paused = false;
-  this._time = null;
+  this._time = 0; // the simulation starts at time 0; the clock reads 0 until the first clock tick (1)
   this._animation.clear();
-  this._setState('playing');
+  this._setState('playing'); // fires playback.changed → the clock picks up the 0
 
   const entries = this._log;
   this._run = (async () => {
