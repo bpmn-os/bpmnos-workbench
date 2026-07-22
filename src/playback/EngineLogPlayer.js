@@ -101,7 +101,7 @@ EngineLogPlayer.prototype.getLogSource = function() {
   return this._logSource;
 };
 
-/** The latest simulated time seen in the stream (clock ticks / token timestamps), or null. */
+/** The latest simulated time from the stream's clock-tick events (the monotonic global clock), or null. */
 EngineLogPlayer.prototype.getTime = function() {
   return this._time;
 };
@@ -267,10 +267,9 @@ EngineLogPlayer.prototype._applyToken = async function(token) {
     // a single mis-resolved entry must not tear down the whole run — report it and carry on
     console.warn('[enginePlayback] could not apply token entry', token, err);
   }
-  const ts = token.status && token.status.timestamp;
-  if (typeof ts === 'number') {
-    this._setTime(ts);
-  }
+  // NOTE: the clock is driven ONLY by clock-tick events (the monotonic global simulated time). A token's
+  // status.timestamp is its own per-instance local time and legitimately moves backward across instances,
+  // so feeding it to the clock would reset the readout mid-run — do not use it here.
 };
 
 EngineLogPlayer.prototype._resolve = async function(token) {
