@@ -82,6 +82,11 @@ EngineLogPlayer.prototype.hasLog = function() {
   return !!(this._log && this._log.length);
 };
 
+/** The log currently loaded/playing (loaded file or a greedy run), for the panel's "Save log". */
+EngineLogPlayer.prototype.getLog = function() {
+  return this._log;
+};
+
 EngineLogPlayer.prototype.getState = function() {
   return this._state;
 };

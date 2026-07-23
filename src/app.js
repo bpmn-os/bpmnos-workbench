@@ -15,7 +15,7 @@ import { BpmnPropertiesPanelModule } from 'bpmn-js-properties-panel';
 import SidePanelModule from 'bpmn-js-side-panel';
 
 import LintModule from 'bpmn-js-bpmnlint';
-import getRules from 'bpmn-workbench/rules';      // essential model-checking rules (bundle carries rationales)
+import getRules from 'bpmnos-js/rules';           // the authoritative BPMN-OS rule set (essentials + engine/* + bpmnos/*)
 import IssuesPanelModule from 'bpmn-workbench/issues'; // self-registering "Issues" side-panel tab
 import createToolbar from 'bpmn-workbench/toolbar';   // on-canvas file/view toolbar (open/save/export/zoom)
 
@@ -35,7 +35,7 @@ import createGreedy from './greedy';           // greedy simulation: runs the wa
 import createModeButtons, { modeIcon } from './mode-buttons';
 import createClock from './clock';               // on-canvas simulation clock (top-right)
 
-import newDiagram from './newDiagram.bpmn?raw';
+import newDiagram from 'bpmnos-js/newDiagram.bpmn?raw'; // the authoritative BPMN-OS starter (status + instance data)
 
 const moddleExtensions = {
   bpmnos: BPMNOSModdleDescriptor

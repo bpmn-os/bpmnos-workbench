@@ -48,6 +48,8 @@ export default function createModeButtons(modeler, greedy) {
   const mode = modeler.get('mode');
   const canvas = modeler.get('canvas');
   const sidePanel = modeler.get('sidePanel', false);
+  const animation = modeler.get('animation', false);
+  const tokenPanel = modeler.get('tokenPanel', false);
   const container = canvas.getContainer();
 
   const el = domify(`
@@ -65,9 +67,13 @@ export default function createModeButtons(modeler, greedy) {
     buttons.forEach(b => domClasses(b).toggle('active', b.getAttribute('data-source') === source));
   }
 
-  function setSource(next) {
-    if (next === source) {
-      next = null; // clicking the active source returns to Model
+  function setSource(requested) {
+    const next = requested === source ? null : requested; // clicking the active source returns to Model
+    if (next !== source && animation) {
+      // a source switch is a fresh simulation session, so clear the tokens. mode.setMode() only clears
+      // when the anim mode actually changes, and greedy↔playback both map to 'playback' — so that one
+      // transition would otherwise carry a run's tokens across. This owns that clearing here in bpmnos.
+      animation.clear();
     }
     source = next;
     if (source === 'greedy') {
@@ -79,6 +85,11 @@ export default function createModeButtons(modeler, greedy) {
     } else {
       greedy && greedy.deactivate();
       mode.setMode('model');
+    }
+    // greedy produces the engine log → offer "Save log"; playback replays a file → "Load log". Both run
+    // in the anim 'play' mode, so the panel can't tell them apart on its own — bpmnos owns this choice.
+    if (tokenPanel && tokenPanel.setLogButton) {
+      tokenPanel.setLogButton(source === 'greedy' ? 'save' : 'load');
     }
     render();
   }
