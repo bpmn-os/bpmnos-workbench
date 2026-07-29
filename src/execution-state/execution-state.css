@@ -1,0 +1,41 @@
+/*
+ * The body of a token entry: three collapsible sections of the side panel's own kind, each holding one line
+ * per attribute. The side panel styles the sections themselves, and its grey ramp is referenced here with
+ * the same fallbacks its own rules use, so what is left is the line: a name that truncates and a value that
+ * keeps the width it needs, right-aligned so that a column of values reads as a column.
+ */
+
+.wb-attribute {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 1px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wb-attribute-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bjs-grey-35, hsl(225, 10%, 35%));
+}
+
+.wb-attribute-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--bjs-grey-15, hsl(225, 10%, 15%));
+}
+
+/* a value the run has not produced, which is shown rather than left blank */
+.wb-attribute-value.wb-attribute-null {
+  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
+  font-style: italic;
+}

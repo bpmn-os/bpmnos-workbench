@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A model declaring data at four nested scopes, one of each kind the ownership rule distinguishes: the
+  process, a plain sub-process, a multi-instance sub-process and an event sub-process. It carries no
+  diagram interchange, since nothing here is drawn: the tests read the moddle tree alone.
+-->
+<bpmn2:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmnos="https://bpmnos.telematique.eu" id="nested-data" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn2:collaboration id="Collaboration_1">
+    <bpmn2:extensionElements>
+      <bpmnos:attributes>
+        <bpmnos:attribute id="Global_Budget" type="decimal" name="budget" />
+      </bpmnos:attributes>
+    </bpmn2:extensionElements>
+    <bpmn2:participant id="Participant_1" processRef="MainProcess" />
+  </bpmn2:collaboration>
+  <bpmn2:process id="MainProcess" isExecutable="true">
+    <bpmn2:extensionElements>
+      <bpmnos:status>
+        <bpmnos:attributes>
+          <bpmnos:attribute id="Timestamp" type="decimal" name="timestamp" objective="minimize" weight="1" />
+          <bpmnos:attribute id="Status_Amount" type="decimal" name="amount := 0" />
+        </bpmnos:attributes>
+      </bpmnos:status>
+    </bpmn2:extensionElements>
+    <bpmn2:dataObject id="DataObject_Main">
+      <bpmn2:extensionElements>
+        <bpmnos:attributes>
+          <bpmnos:attribute id="Instance" type="string" name="instance" />
+          <bpmnos:attribute id="Data_Main" type="string" name="main_data" />
+        </bpmnos:attributes>
+      </bpmn2:extensionElements>
+    </bpmn2:dataObject>
+    <bpmn2:startEvent id="Start">
+      <bpmn2:outgoing>Flow_1</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:sequenceFlow id="Flow_1" sourceRef="Start" targetRef="PlainSub" />
+    <bpmn2:subProcess id="PlainSub">
+      <bpmn2:incoming>Flow_1</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_2</bpmn2:outgoing>
+      <bpmn2:dataObject id="DataObject_Plain">
+        <bpmn2:extensionElements>
+          <bpmnos:attributes>
+            <bpmnos:attribute id="Data_Plain" type="string" name="plain_data" />
+          </bpmnos:attributes>
+        </bpmn2:extensionElements>
+      </bpmn2:dataObject>
+      <bpmn2:startEvent id="PlainStart">
+        <bpmn2:outgoing>Flow_Plain_1</bpmn2:outgoing>
+      </bpmn2:startEvent>
+      <bpmn2:sequenceFlow id="Flow_Plain_1" sourceRef="PlainStart" targetRef="PlainTask" />
+      <bpmn2:task id="PlainTask">
+        <bpmn2:extensionElements>
+          <bpmnos:status>
+            <bpmnos:attributes>
+              <bpmnos:attribute id="Status_Note" type="string" name="note" />
+            </bpmnos:attributes>
+          </bpmnos:status>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>Flow_Plain_1</bpmn2:incoming>
+        <bpmn2:outgoing>Flow_Plain_2</bpmn2:outgoing>
+      </bpmn2:task>
+      <bpmn2:sequenceFlow id="Flow_Plain_2" sourceRef="PlainTask" targetRef="PlainEnd" />
+      <bpmn2:endEvent id="PlainEnd">
+        <bpmn2:incoming>Flow_Plain_2</bpmn2:incoming>
+      </bpmn2:endEvent>
+    </bpmn2:subProcess>
+    <bpmn2:sequenceFlow id="Flow_2" sourceRef="PlainSub" targetRef="MultiSub" />
+    <bpmn2:subProcess id="MultiSub">
+      <bpmn2:incoming>Flow_2</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_3</bpmn2:outgoing>
+      <bpmn2:multiInstanceLoopCharacteristics />
+      <bpmn2:dataObject id="DataObject_Multi">
+        <bpmn2:extensionElements>
+          <bpmnos:attributes>
+            <bpmnos:attribute id="Data_Multi" type="string" name="multi_data" />
+          </bpmnos:attributes>
+        </bpmn2:extensionElements>
+      </bpmn2:dataObject>
+      <bpmn2:startEvent id="MultiStart">
+        <bpmn2:outgoing>Flow_Multi_1</bpmn2:outgoing>
+      </bpmn2:startEvent>
+      <bpmn2:sequenceFlow id="Flow_Multi_1" sourceRef="MultiStart" targetRef="MultiTask" />
+      <bpmn2:task id="MultiTask">
+        <bpmn2:incoming>Flow_Multi_1</bpmn2:incoming>
+        <bpmn2:outgoing>Flow_Multi_2</bpmn2:outgoing>
+      </bpmn2:task>
+      <bpmn2:sequenceFlow id="Flow_Multi_2" sourceRef="MultiTask" targetRef="MultiEnd" />
+      <bpmn2:endEvent id="MultiEnd">
+        <bpmn2:incoming>Flow_Multi_2</bpmn2:incoming>
+      </bpmn2:endEvent>
+    </bpmn2:subProcess>
+    <bpmn2:sequenceFlow id="Flow_3" sourceRef="MultiSub" targetRef="End" />
+    <bpmn2:endEvent id="End">
+      <bpmn2:incoming>Flow_3</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:subProcess id="EventSub" triggeredByEvent="true">
+      <bpmn2:dataObject id="DataObject_Event">
+        <bpmn2:extensionElements>
+          <bpmnos:attributes>
+            <bpmnos:attribute id="Data_Event" type="string" name="event_data" />
+          </bpmnos:attributes>
+        </bpmn2:extensionElements>
+      </bpmn2:dataObject>
+      <bpmn2:startEvent id="EventStart">
+        <bpmn2:outgoing>Flow_Event_1</bpmn2:outgoing>
+        <bpmn2:signalEventDefinition id="SignalEventDefinition_1" />
+      </bpmn2:startEvent>
+      <bpmn2:sequenceFlow id="Flow_Event_1" sourceRef="EventStart" targetRef="EventTask" />
+      <bpmn2:task id="EventTask">
+        <bpmn2:incoming>Flow_Event_1</bpmn2:incoming>
+      </bpmn2:task>
+    </bpmn2:subProcess>
+  </bpmn2:process>
+</bpmn2:definitions>

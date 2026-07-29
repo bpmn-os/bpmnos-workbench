@@ -4,6 +4,17 @@
   "type": "module",
   "description": "A BPMN-OS workbench for optimization and simulation",
   "main": "src/app.js",
+  "exports": {
+    "./execution-state": "./src/execution-state/index.js",
+    "./execution-state/store": "./src/execution-state/Store.js",
+    "./execution-state/sections": "./src/execution-state/sections.js",
+    "./execution-state/view": "./src/execution-state/View.js",
+    "./execution-state/execution-state.css": "./src/execution-state/execution-state.css",
+    "./playback": "./src/playback/index.js",
+    "./playback/*": "./src/playback/*",
+    "./greedy": "./src/greedy/index.js",
+    "./greedy/*": "./src/greedy/*"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -18,14 +29,14 @@
     "@bpmn-io/properties-panel": "^3.46.0",
     "@bpmn-os/bpmnos-wasm": "github:bpmn-os/bpmnos-wasm#dist",
     "bpmn-js": "^18.19.0",
-    "bpmn-js-animation": "github:bpmn-os/bpmn-js-animation#8b8d635912d2f09c77e75baf8603cf056d305f92",
+    "bpmn-js-animation": "github:bpmn-os/bpmn-js-animation#2c006e52083fa2df21eda27b8c64333748233a37",
     "bpmn-js-bpmnlint": "^0.24.0",
     "bpmn-js-properties-panel": "^5.60.0",
-    "bpmn-js-side-panel": "github:bpmn-os/bpmn-js-side-panel#d1a61ca838570903df971443fdb0f4e1c5419186",
-    "bpmn-workbench": "github:bpmn-os/bpmn-workbench#588ce61bf2d16af22abe0ea14af1f69e97437511",
+    "bpmn-js-side-panel": "github:bpmn-os/bpmn-js-side-panel#2493a4d65d7da2d646e1f24a74faaad2ef7c2506",
+    "bpmn-workbench": "github:bpmn-os/bpmn-workbench#8ba110b424cd5589df891ba2c0d93c7b661acf5c",
     "bpmnlint": "^10.3.0",
     "bpmnlint-utils": "^1.1.1",
-    "bpmnos-js": "github:bpmn-os/bpmnos-js#386801bd6502f48af9cce313f02ea6c3ed8151b0",
+    "bpmnos-js": "github:bpmn-os/bpmnos-js#2858562941a573ecd11a76269c42d699018de6fc",
     "diagram-js": "^15.18.0",
     "dseg": "^0.46.0",
     "inherits": "^2.0.4",
@@ -33,7 +44,9 @@
     "tiny-svg": "^4.1.4"
   },
   "devDependencies": {
+    "bpmn-moddle": "^10.1.0",
     "less": "^4.6.7",
+    "linkedom": "^0.18.13",
     "vite": "^5.4.0"
   },
   "engines": {

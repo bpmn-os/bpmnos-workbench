@@ -8,14 +8,37 @@ side-panel design, the `bpmnos-wasm` API contract, requirements R1–R5, and wor
 
 ## Current state
 
-**Playback (milestone 1) is built.** A Vite app (`npm run dev` / `build` / `preview`; `node >=22`)
+**Playback and greedy simulation are built, and the value store and its view are being added.** The
+statements further down that greedy simulation and the wasm engine are "not built yet" are out of date:
+`src/greedy/EngineRunner.js` runs the engine in a Web Worker and `@bpmn-os/bpmnos-wasm` is a declared
+dependency. The repository now has tests, `test/*.test.mjs` under `node --test`, whose fixtures are models
+parsed with `bpmn-moddle` and whose registries come from `bpmnos-js/collect-execution-data`, so a module is
+testable without a diagram. Everything under `src/` is written so that Node can resolve it: a relative import
+names its file with its extension, and a directory is named by its `index.js`.
+
+`src/execution-state/` holds what a run produces. `Store.js` is a plain module taking a registry, holding a
+token's state and status under that token, a data container under the token that owns it, and the globals
+once; `index.js` wires it as the `executionState` service, following the animation's `token.moved`,
+`token.removed` and `tokens.cleared`; `sections.js` resolves what a node declares against the store into the
+rows a token entry shows; `View.js` draws those rows as three collapsible sections of `bpmn-js-side-panel`
+and keeps a shown value current by writing into the element carrying it. `EngineLogPlayer` is the only
+writer: it applies each record as it replays it. Neither keyword is held or shown, `Instance` being a token's
+label and `Timestamp` being the clock on the canvas. The Tokens tab is given the body through
+`config.tokenPanel.renderTokenDetail`, which `bpmn-js-animation` reads as it builds its lists, so the
+renderer is passed at construction and creates its view on the first row it draws. The repository has an
+`exports` map on the pattern `bpmn-workbench` uses, offering `./execution-state` and its three pieces,
+`./playback` and `./greedy`; `bpmnos-js` must never consume them, the reverse edge being a cycle. The design and the reasoning behind it are recorded in
+`~/Code/bpmnos/Next sprint.md`, decisions D1 to D7.
+
+A Vite app (`npm run dev` / `build` / `preview`; `node >=22`)
 mirroring `bpmn-workbench`: a `BpmnModeler` with the full `bpmnos-js` module (moddle + decision-task +
 properties panel, auto-hosted as the side panel's "Properties" tab), `bpmn-workbench`'s
 rules/issues/toolbar, and **native playback of BPMN-OS engine execution logs**. It boots on a **blank
 diagram** — nothing is hardwired: load a model with the toolbar and an engine `-log.json` with the Tokens
 tab's "Load log". `src/examples/earliest-arrival.{bpmn,-log.json}` (the EAP instance from
-`BPMNOSInstances.jl`) is a loadable sample, not auto-loaded. Manual and greedy simulation (and the wasm
-engine) are **not** built yet — playback replays a recorded `-log.json`, no engine in the loop.
+`BPMNOSInstances.jl`) is a loadable sample, not auto-loaded, and the tests play that very log. Manual
+(interactive) simulation is **not** built yet; greedy simulation runs the wasm engine live (`src/greedy/`)
+and playback replays a recorded `-log.json`.
 
 **Reuse upstream, don't reinvent.** The playback UI is bpmn-js-animation's own **TokenPanel** (the
 "Tokens" side-panel tab: run/pause, speed, Load log); the mode toggle uses bpmn-workbench's mode-button
@@ -30,10 +53,15 @@ Key source (this repo):
   `pulse` in playback).
 - `src/playback/index.js` — `EnginePlaybackModule` (`playback: EngineLogPlayer`; list AFTER
   `TokenPanelModule` in `additionalModules` so the override wins). Depends on `AnimationModule`.
+- `src/execution-state/` — the values a run produces: `Store.js` (plain, registry-taking, node-testable),
+  `index.js` (the `executionState` service, riding the animation's token events), `sections.js` (the rows a
+  token entry shows), `View.js` + `execution-state.css` (the body, kept current in place). Requires
+  `bpmnos-js/execution-data` in `additionalModules`, which the full `bpmnos-js` module does not bring.
+- `test/` — `node --test`; `support/model.mjs` parses a fixture and collects its registry, and
+  `support/animation.mjs` stubs the services the player drives, so a whole log replays without a diagram.
 - `src/mode-buttons.js` + `mode-buttons.css` — the on-canvas Playback toggle (`mode.setMode('model'|
   'playback')`); CSS copied verbatim from bpmn-workbench (not exported by that package).
 - `src/context-pad-compat.js` — copy of bpmnos-js's context-pad shim (that module is not exported).
-- `src/bpmnos.css` — copy of bpmnos-js's decision-task icon css (not exported by the package).
 - `vite.config.js` — a plugin transforms bpmnos-js's preact-JSX-in-`.js` for the production (rollup)
   build; in dev, `optimizeDeps.include: ['bpmnos-js']` pre-bundles it with the jsx loader (which also
   interop-wraps its CommonJS deps like `inherits`).

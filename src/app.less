@@ -60,3 +60,20 @@ html {
     box-shadow: 0 0 0 0 rgba(219, 40, 40, 0);
   }
 }
+
+/* The lightbulbs named in the Properties tab's note while a run is on. The icons are drawn by bpmnos-js's
+   stylesheet as `::before` content, whose 1px top margin is tuned for the 22x22 context pad entry and would
+   leave the glyph sitting low in a line of text, so it is dropped here and the box is centred on the line. */
+.wb-note-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 20px;
+  height: 20px;
+
+  position: relative;
+  top: -1px; /* the box centres on the line; this brings the glyph within it onto the text's own centre */
+
+  &::before {
+    margin: 0;
+  }
+}

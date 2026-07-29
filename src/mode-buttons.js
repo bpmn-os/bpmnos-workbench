@@ -117,10 +117,9 @@ export default function createModeButtons(modeler, greedy) {
       greedy && greedy.deactivate();
     }
     render();
-    if (sidePanel) {
-      // Issues in Model; the Tokens tab otherwise (greedy's Input entry lives inside the Tokens tab too)
-      sidePanel.activate(event.mode === 'model' ? 'issues' : 'tokens');
-    }
+    // The tab the user is on is theirs: a mode switch changes what a tab shows, the Tokens tab gaining its
+    // controls and the Properties tab its note, and moving them elsewhere while they read would be the
+    // control taking the panel over.
   });
 
   render();

@@ -1,4 +1,4 @@
-import { is, isAny } from 'bpmn-js/lib/util/ModelUtil';
+import { is, isAny } from 'bpmn-js/lib/util/ModelUtil.js';
 
 /**
  * EngineLogPlayer — plays back a BPMN-OS engine execution log (`-log.json`) as animated token flow.
@@ -45,11 +45,15 @@ function isMultiInstanceNode(element) {
   return !!(lc && lc.$type === 'bpmn:MultiInstanceLoopCharacteristics');
 }
 
-export default function EngineLogPlayer(eventBus, animation, primitives, elementRegistry) {
+export default function EngineLogPlayer(eventBus, animation, primitives, elementRegistry, injector) {
   this._eventBus = eventBus;
   this._animation = animation;
   this._primitives = primitives;
   this._elementRegistry = elementRegistry;
+
+  // The value store, where a host provides one. The player is the only writer: it is the component that
+  // walks the log record by record, so it is the only one that knows which record the diagram is showing.
+  this._executionState = injector.get('executionState', false);
 
   this._log = null;
   this._state = 'idle'; // 'idle' | 'playing' | 'paused'
@@ -68,7 +72,7 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   });
 }
 
-EngineLogPlayer.$inject = [ 'eventBus', 'animation', 'primitives', 'elementRegistry' ];
+EngineLogPlayer.$inject = [ 'eventBus', 'animation', 'primitives', 'elementRegistry', 'injector' ];
 
 // --- log + transport ---------------------------------------------------------
 
@@ -285,15 +289,12 @@ EngineLogPlayer.prototype._resolve = async function(token) {
 
   const element = this._elementRegistry.get(node);
 
-  // EVENT-SUB-PROCESS SCOPE TOKEN — the engine emits a scope token at the event-sub-process node itself
-  // for every firing ("<enclosing>^<evtsp>#<k>"). The animation already represents a firing by the token
-  // at its START EVENT (which stacks the firing at the event-sub node), so this scope token is redundant —
-  // and its "^<evtsp>#<k>" id even collides with the MI-sub id shape (`_miParent`), double-stacking the
-  // event-sub node. Skip it: the start-event token owns the firing's stack key and drops it on consume.
-  if (nodeId && element && is(element, 'bpmn:SubProcess') &&
-      element.businessObject && element.businessObject.triggeredByEvent) {
-    return;
-  }
+  // EVENT SUB-PROCESSES — no record ever names one. A state machine created for a scope puts its tokens on
+  // that scope's START NODES (`StateMachine::run`), and a token rests at a sub-process node only by having
+  // flowed into it, which an event sub-process is never the target of. A firing is reported as a token at
+  // its start event, under the derived instance id "<enclosing>^<evtsp>#<k>" (which `_parentOf` decodes
+  // back to the enclosing instance), and as tokens at the nodes within it. So there is nothing to skip
+  // here, and the token at the start event is what represents the firing throughout.
 
   // a process/scope-level token (no nodeId) is always container-like; otherwise classify the node
   const containerLike = !nodeId || (element && isAny(element, [ 'bpmn:Activity', 'bpmn:Process', 'bpmn:Participant' ]));
@@ -304,11 +305,21 @@ EngineLogPlayer.prototype._resolve = async function(token) {
   //  - an ad-hoc sub-process's no-incoming child activity              → first logged as CREATED
   // createToken dispatches by node kind (process / start event / MI activity / activity / boundary); a
   // token reached along a flow already exists here, and a node createToken can't make throws → skipped.
-  if (!sequenceFlowId && (state === 'CREATED' || state === 'READY' || state === 'ENTERED') &&
-      !anim.getToken(node, label)) {
-    if (!this._birth(node, label, element)) {
-      return; // couldn't create it (e.g. a gateway / plain event with no token) — nothing to draw
-    }
+  const birth = !sequenceFlowId && (state === 'CREATED' || state === 'READY' || state === 'ENTERED') &&
+    !anim.getToken(node, label);
+
+  if (birth && !this._birth(node, label, element)) {
+    return; // couldn't create it (e.g. a gateway / plain event with no token) — nothing to draw
+  }
+
+  // THE STORE — one record, one store update, then the animation call it resolves to. The engine runs
+  // ahead of the animation, a greedy run producing its whole log before a single dot has moved, so the
+  // values are applied here, as the record is replayed, rather than as it arrives. A birth has recorded
+  // its parentage just above, which is the relation an attribute's owner is resolved through, so by now
+  // the store can place every value this record carries.
+  this._apply(token);
+
+  if (birth) {
     await anim.whenEntered(node, label); // let the entrance flip play (and be seen) before any next step
     await anim.whenFocused();
     // CREATED flips in and continues; ENTERED sits at its birth position (no anim). Only READY still
@@ -334,6 +345,7 @@ EngineLogPlayer.prototype._resolve = async function(token) {
       case 'DONE':
       case 'WITHDRAWN':
       case 'FAILED':
+        this._forget(node, label);
         return anim.getToken(node, label) ? anim.consumeToken({ node, label }) : undefined;
       case 'FAILING':
         this._error(node, label);
@@ -426,7 +438,12 @@ EngineLogPlayer.prototype._resolve = async function(token) {
     case 'DONE':
     case 'WITHDRAWN':
     case 'FAILED':
-      // the token leaves the model — flip + fade out (consumeToken's standard exit)
+      // the token leaves the model — flip + fade out (consumeToken's standard exit). What it held goes with
+      // it, its status and the container it owns; what it merely read lives on in the entry of the token
+      // owning that. The record itself was applied above, so a value it wrote through to an ancestor's
+      // container stands. Evicting here rather than leaving it to `token.removed` also covers a token the
+      // animation never held, which fires no such event.
+      this._forget(node, label);
       if (anim.getToken(node, label)) {
         return anim.consumeToken({ node, label });
       }
@@ -449,10 +466,34 @@ EngineLogPlayer.prototype._birth = function(node, label, element) {
   try {
     const parent = this._parentOf(node, label, element); // { parentNode, parentLabel } or undefined
     this._animation.createToken({ node, label, ...(parent || {}) });
+
+    // the store records the same relation, since resolving which token owns a data container walks it
+    if (this._executionState) {
+      this._executionState.createToken({ node, label, ...(parent || {}) });
+    }
     return true;
   } catch (err) {
     console.warn('[enginePlayback] birth createToken failed', node, label, err);
     return false;
+  }
+};
+
+// --- the value store ---------------------------------------------------------
+//
+// Three calls, each guarded, so playback works unchanged in a host that provides no store.
+
+// Apply a record's state, status, data and globals. Every record is applied, whatever state it reports and
+// whether or not it moves anything, since the values it carries are the reporting token's either way.
+EngineLogPlayer.prototype._apply = function(record) {
+  if (this._executionState) {
+    this._executionState.apply(record);
+  }
+};
+
+// Drop what dies with a token.
+EngineLogPlayer.prototype._forget = function(node, label) {
+  if (this._executionState) {
+    this._executionState.removeToken({ node, label });
   }
 };
 
@@ -488,10 +529,19 @@ EngineLogPlayer.prototype._parentOf = function(node, label, element) {
     const slot = '^' + scope.id + '#';
     const at = s.lastIndexOf(slot);
     const enclosingLabel = at > -1 ? s.slice(0, at) : s;
-    return enclosing ? { parentNode: enclosing.id, parentLabel: enclosingLabel } : undefined;
+    return enclosing ? { parentNode: scopeId(enclosing), parentLabel: enclosingLabel } : undefined;
   }
-  return { parentNode: scope.id, parentLabel: label };
+  return { parentNode: scopeId(scope), parentLabel: label };
 };
+
+// The identifier of an enclosing scope: a pool stands for a process, and the process is what the engine
+// reports and what the workbench keys a process-level token by, so a pool is named by its process. The
+// animation takes either, mapping a process to its pool itself, so one identifier serves both.
+function scopeId(scope) {
+  const processRef = scope.businessObject && scope.businessObject.processRef;
+
+  return processRef ? processRef.id : scope.id;
+}
 
 // The MI main a sub-instance spawns from as { parentNode, parentLabel }, or undefined for anything else.
 // The engine ids an MI sub "<parent>^<miNode>#<k>" (a convention the workbench owns, not the lib), so its

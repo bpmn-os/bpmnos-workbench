@@ -6,10 +6,11 @@ import 'bpmn-js-bpmnlint/dist/assets/css/bpmn-js-bpmnlint.css';
 import 'bpmn-js-side-panel/assets/side-panel.css';
 import 'bpmn-js-animation/assets/animation.css';
 import 'bpmn-js-animation/assets/token-panel.css';
-import './bpmnos.css';
+import 'bpmnos-js/bpmnos.css';        // the decision-task and execution-data-box icons
+import './execution-state/execution-state.css'; // the token entry's status/data/globals body
 import './app.less';
 
-import BpmnModeler from 'bpmn-js/lib/Modeler';
+import BpmnModeler from 'bpmn-js/lib/Modeler.js';
 
 import { BpmnPropertiesPanelModule } from 'bpmn-js-properties-panel';
 import SidePanelModule from 'bpmn-js-side-panel';
@@ -27,19 +28,56 @@ import { TokenPanelModule, ModeModule } from 'bpmn-js-animation';
 // BPMNOS bpmn-js modules: the moddle extension + the decision-task decorator and properties panel.
 import BPMNOSModdleDescriptor from 'bpmnos-js/moddle';
 import BPMNOSModule from 'bpmnos-js';
-import ContextPadCompatModule from './context-pad-compat';
+import ExecutionDataModule from 'bpmnos-js/execution-data'; // the `executionData` registry service
+import AnnotationModule, { annotationRole } from 'bpmnos-js/annotation'; // the on-canvas execution data box
+import ContextPadCompatModule from './context-pad-compat.js';
 
 // native BPMN-OS execution-log playback (this repo) — overrides the packaged `playback` service
-import EnginePlaybackModule from './playback';
-import createGreedy from './greedy';           // greedy simulation: runs the wasm engine live
-import createModeButtons, { modeIcon } from './mode-buttons';
-import createClock from './clock';               // on-canvas simulation clock (top-right)
+import EnginePlaybackModule from './playback/index.js';
+// → `executionState`: the values a run produces, and the body of a token entry that shows them
+import ExecutionStateModule, { createTokenDetailRenderer } from './execution-state/index.js';
+import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
+import createModeButtons, { modeIcon } from './mode-buttons.js';
+import createClock from './clock.js';               // on-canvas simulation clock (top-right)
 
 import newDiagram from 'bpmnos-js/newDiagram.bpmn?raw'; // the authoritative BPMN-OS starter (status + instance data)
 
 const moddleExtensions = {
   bpmnos: BPMNOSModdleDescriptor
 };
+
+/**
+ * What stays editable while a simulation or a playback is on.
+ *
+ * The canvas is read-only there, since the process is not being edited, but an execution data box is about
+ * reading a model rather than changing one: it is opened to see what a node declares, pushed aside when it
+ * covers something, and widened when its content is cut off. So the lightbulb keeps working, and a box may
+ * be created, moved, resized and deleted, while everything else stays as read-only as before. Such a box is
+ * a `bpmn:TextAnnotation` in the model, so this does write to the model and to its undo history, which is
+ * right for something the user does on purpose.
+ *
+ * `bpmnos-js` says what an element is to a box and the mode says what may be done while a run is on; this is
+ * the whole of what joins the two.
+ */
+const modeExceptions = [ {
+  operations: [
+    'appendShape',    // the lightbulb, which appends the box to its host
+    'updateProperties', // showing and hiding it
+    'moveShape', 'moveElements', 'moveConnection', 'layoutConnection', // pushing it aside
+    'resizeShape',    // widening it
+    'removeElements', 'removeShape', 'removeConnection' // taking it away again
+  ],
+  entries: [ 'bpmnos-annotation' ],
+  applies: (operation, element) => {
+    const role = annotationRole(element);
+
+    // creating a box is an operation on the element that gets one; everything else is on the box itself,
+    // or on the association, which follows its box
+    return operation === 'appendShape' || operation === 'contextPad'
+      ? !!role
+      : role === 'box' || role === 'association';
+  }
+} ];
 
 // The side panel auto-hosts the properties panel as its first "Properties" tab (we deliberately do not
 // set the properties panel's own `parent`); IssuesPanelModule adds "Issues", TokenPanelModule adds "Tokens".
@@ -52,7 +90,14 @@ const modeler = new BpmnModeler({
     // shown in the Tokens tab while in Model mode — points at the on-canvas mode buttons (same icons)
     modelNote: 'Click ' + modeIcon('greedy', 'greedy')
       + ' to start/end a greedy simulation, or ' + modeIcon('playback', 'playback')
-      + ' to start/end playback of execution logs.'
+      + ' to start/end playback of execution logs.',
+
+    // expanding a token row shows what that token holds: its status, the data it reads, and the globals
+    renderTokenDetail: createTokenDetailRenderer({ get: (name) => modeler.get(name) })
+  },
+  mode: {
+    // read-only outside Model mode, except for the execution data box (see `modeExceptions`)
+    exceptions: modeExceptions
   },
   sidePanel: {
     parent: '#side-panel',
@@ -67,12 +112,15 @@ const modeler = new BpmnModeler({
   additionalModules: [
     BpmnPropertiesPanelModule,
     BPMNOSModule,
+    ExecutionDataModule, // → `executionData`: what each element declares and inherits (not in the full module)
+    AnnotationModule,    // → the on-canvas execution data box, opened from the context pad's lightbulb
     ContextPadCompatModule,
     SidePanelModule,
     LintModule,
     IssuesPanelModule,
     TokenPanelModule,     // → "Tokens" tab (run/pause, speed, Load log)
     ModeModule,           // → mode.setMode('model'|'playback')
+    ExecutionStateModule, // → `executionState`: status, data and globals per token, written by the player
     EnginePlaybackModule  // → overrides `playback` with the native engine-log player (list last)
   ],
   moddleExtensions
@@ -93,6 +141,23 @@ modeler.importXML(newDiagram).catch(err => console.error('failed to import diagr
 
 // On-canvas file/view toolbar (open, save, export SVG, centre, zoom) — packaged by bpmn-workbench.
 createToolbar(modeler);
+
+// The Properties tab holds no meaning while a run is on: the canvas is read-only, so its fields would edit
+// a model that is not being edited. The tab keeps its title and its place and says what may be done
+// instead, which is to read what an element declares from its execution data box. The Tokens tab does the
+// same the other way round, showing a note while the workbench is in Model mode.
+const propertiesNote = 'Select an element and click '
+  + '<span class="bpmnos-icon-annotation-show wb-note-icon"></span> or '
+  + '<span class="bpmnos-icon-annotation-hide wb-note-icon"></span> '
+  + 'to show or hide its execution data.';
+
+modeler.on('mode.changed', ({ mode }) => {
+  const sidePanel = modeler.get('sidePanel', false);
+
+  if (sidePanel && sidePanel.getTab('properties')) {
+    sidePanel.setNote('properties', mode === 'model' ? null : propertiesNote);
+  }
+});
 
 // The on-canvas mode toggles: greedy simulation (microchip, runs the wasm engine) and playback (play).
 const greedy = createGreedy(modeler);

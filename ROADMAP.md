@@ -12,6 +12,31 @@ wasm module** to play back and simulate real BPMN-OS processes. The cross-repo i
 own `jsonify` stream; the animation translation is internal to the workbench (both CLAUDE.mds fix this
 boundary).
 
+## Status (2026-07-29): what a token holds
+
+R2 is being built, as the sprint recorded in `~/Code/bpmnos/Next sprint.md`. The workbench now keeps the
+values a run produces in a store of its own, `src/execution-state/`, and renders them as the body of a token
+entry. The store holds a token's state and status under that token, a data container under the token that
+owns it, and the globals once, and it is written by `EngineLogPlayer` as it replays each record, so what a
+token shows is what it held at the step the diagram is showing rather than at the end of the run. Its keys
+follow the animation's own token events, a hop rekeying an entry and a removal dropping one, and the view
+keeps a shown value current by writing into the element carrying it rather than by rebuilding the body.
+
+The `DataUpdate` question this document left open is answered and needs none of the three options weighed
+under R2. Every data update is accompanied by a token notification from the token that made the change, and
+that notification carries the new values of its container and of the globals, so token notifications alone
+maintain the store and neither `bpmnos-wasm` nor the engine is changed. Forwarding `DataUpdate` remains worth
+having later for one purpose only, which is to mark in the view precisely which attributes have just changed.
+
+The Tokens tab shows it. `bpmn-js-animation` now reads a body renderer from `config.tokenPanel.renderTokenDetail`
+and keys its rows by node and label, so the workbench passes `createTokenDetailRenderer` and a row expands to
+what its token holds. The store, its rows and its view are exported as modules of their own, on the pattern
+`bpmn-workbench` uses, so another host may take one without the application.
+
+What remains of R2 is what the panels after it will need rather than the token entry itself: marking which
+attributes have just changed, which is what forwarding `DataUpdate` would buy, and the message and sequence
+panels of R3 and R6, whose rows are token entries drawn by the same view.
+
 ## Status (2026-07-21)
 
 **Playback and greedy simulation are built and working.** The app scaffold, the engine-token → animation
@@ -251,7 +276,10 @@ and the `globals` — so the user never has to collect information across panels
   + a reference to the changed `Attribute*` list — no values, no `jsonify()`**. So live updates need one
   of: (a) a bridge-side `DataUpdate` serialization that reads current values from state; (b) a
   `getData(instanceId)`/`getGlobals()` query JS calls on the signal; or (c) token re-notification (values
-  only on advance). **Decision deferred**; none is a passthrough.
+  only on advance). **Settled in favour of (c), and it costs nothing:** no data or global value ever changes
+  without an accompanying token notification from the token that made the change, and `Token::jsonify`
+  already emits `status`, `data` and `globals` with their current values. So the store is maintained from
+  the token stream alone. See the 2026-07-29 status above.
 - **Separation — the expandable-entry primitive goes in `bpmn-js-side-panel`.** Not `bpmn-js-animation`
   (it has no side panel) and not `bpmn-workbench`. The side panel owns tabs, so it should also provide a
   reusable **expandable-entry list**: entries with a **collapsed summary + optional expandable custom

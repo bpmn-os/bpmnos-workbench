@@ -5,7 +5,7 @@ import {
 
 import { createCollapsibleEntry, createTableEntry } from 'bpmn-js-side-panel';
 
-import EngineRunner from './EngineRunner';
+import EngineRunner from './EngineRunner.js';
 import './greedy.css';
 
 /*
@@ -28,7 +28,6 @@ import './greedy.css';
  * @returns {{ activate: () => void, deactivate: () => void }}
  */
 export default function createGreedy(modeler) {
-  const sidePanel = modeler.get('sidePanel', false);
   const tokenPanel = modeler.get('tokenPanel', false); // hosts the Input control + footer transport
   const playback = modeler.get('playback'); // our EngineLogPlayer (registered as `playback`)
   const eventBus = modeler.get('eventBus');
@@ -89,9 +88,6 @@ export default function createGreedy(modeler) {
     entry = createCollapsibleEntry({ id: 'greedy-input', label: 'Input', open: true });
     body = entry.contentEl;
     controlHandle = tokenPanel.addControl(entry.element); // below auto-focus, in the controls region
-    if (sidePanel) {
-      sidePanel.activate('tokens');
-    }
     loadFromModel();
   }
 
