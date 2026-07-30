@@ -65,6 +65,15 @@ Key source (this repo):
   `pulse` in playback).
 - `src/playback/index.js` — `EnginePlaybackModule` (`playback: EngineLogPlayer`; list AFTER
   `TokenPanelModule` in `additionalModules` so the override wins). Depends on `AnimationModule`.
+- `src/messages/` — the messages a run has sent and not yet disposed of: `Store.js` (plain, keyed by the
+  sending node and the sending instance, node-testable), `index.js` (the `messages` service, announcing
+  `messages.changed`, clearing with the tokens), `Panel.js` (the "Messages" tab, built from the Tokens tab's
+  own classes so the two lists are one appearance), `MessageEntry.js` (a row: BPMN's own message envelope
+  with a bullet in the sending token's colour, over the `wb-attribute` lines a token's attributes use). The
+  player is the only writer, applying each record as it replays it and reading the sender's colour then.
+  A listener that clears must not *return* the clearance: diagram-js stops an event a listener answers, and
+  returning from `diagram.clear` kept the canvas from hearing it, which surfaced as `rootDi is undefined`
+  from `saveXML`.
 - `src/execution-state/` — the values a run produces: `Store.js` (plain, registry-taking, node-testable),
   `index.js` (the `executionState` service, riding the animation's token events), `sections.js` (the rows a
   token entry shows), `View.js` + `execution-state.css` (the body, kept current in place). Requires

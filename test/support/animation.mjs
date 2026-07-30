@@ -143,13 +143,17 @@ export function createEventBus() {
   };
 }
 
-/** The animation primitives the player asks for its timing and its one-shot effects. */
-export function createPrimitives() {
+/**
+ * The animation primitives the player asks for its timing, its one-shot effects, and the tokens on show,
+ * which is where a colour is read from. The tokens a test wants answered are given here.
+ */
+export function createPrimitives(tokens = []) {
   return {
     getAnimationDuration: () => 0,
     setAnimationDuration() {},
     playTokenEffect() {},
-    drillTo() {}
+    drillTo() {},
+    getTokens: (filter) => filter ? tokens.filter(filter) : tokens
   };
 }
 

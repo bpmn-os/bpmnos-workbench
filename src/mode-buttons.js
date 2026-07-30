@@ -96,13 +96,15 @@ export default function createModeButtons(modeler, greedy) {
 
   buttons.forEach(b => domEvent.bind(b, 'click', () => setSource(b.getAttribute('data-source'))));
 
-  // The Tokens-tab "model note" repeats these icons inline (modeIcon(..., source) → data-mode-source).
-  // Delegate clicks on the tokens pane so those inline icons switch source too — same path as the buttons,
-  // and it survives the note being re-rendered. (We do NOT use the TokenPanel's data-set-mode, whose raw
+  // A "model note" repeats these icons inline (modeIcon(..., source) → data-mode-source), in the Tokens tab
+  // and in the Messages tab. Delegate clicks on the element holding the panes, so an icon switches source
+  // whichever tab shows it — same path as the buttons, surviving the note being re-rendered and needing no
+  // list of tabs kept in step with the panel. (We do NOT use the TokenPanel's data-set-mode, whose raw
   // mode.setMode would throw on 'greedy'.)
-  const tokensPane = sidePanel && sidePanel.getTab && sidePanel.getTab('tokens');
-  if (tokensPane && tokensPane.pane) {
-    domEvent.bind(tokensPane.pane, 'click', event => {
+  const tokensPane = sidePanel && sidePanel.getTab && sidePanel.getTab('tokens'),
+        panes = tokensPane && tokensPane.pane && tokensPane.pane.parentNode;
+  if (panes) {
+    domEvent.bind(panes, 'click', event => {
       const icon = event.target.closest && event.target.closest('[data-mode-source]');
       if (icon) {
         setSource(icon.getAttribute('data-mode-source'));

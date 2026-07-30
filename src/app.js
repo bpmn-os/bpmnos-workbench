@@ -36,6 +36,7 @@ import ContextPadCompatModule from './context-pad-compat.js';
 import EnginePlaybackModule from './playback/index.js';
 // → `executionState`: the values a run produces, and the body of a token entry that shows them
 import ExecutionStateModule, { createTokenDetailRenderer } from './execution-state/index.js';
+import MessagesModule from './messages/index.js';        // → the "Messages" tab
 import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
 import createModeButtons, { modeIcon } from './mode-buttons.js';
 import createClock from './clock.js';               // on-canvas simulation clock (top-right)
@@ -81,6 +82,12 @@ const modeExceptions = [ {
 
 // The side panel auto-hosts the properties panel as its first "Properties" tab (we deliberately do not
 // set the properties panel's own `parent`); IssuesPanelModule adds "Issues", TokenPanelModule adds "Tokens".
+// Both tabs a run concerns say the same thing while there is no run: how one is started. The icons are the
+// on-canvas mode buttons' own, and a click on one switches source through the same path they do.
+const runNote = 'Click ' + modeIcon('greedy', 'greedy')
+  + ' to start/end a greedy simulation, or ' + modeIcon('playback', 'playback')
+  + ' to start/end playback of execution logs.';
+
 const modeler = new BpmnModeler({
   container: '#canvas',
   linting: {
@@ -88,12 +95,14 @@ const modeler = new BpmnModeler({
   },
   tokenPanel: {
     // shown in the Tokens tab while in Model mode — points at the on-canvas mode buttons (same icons)
-    modelNote: 'Click ' + modeIcon('greedy', 'greedy')
-      + ' to start/end a greedy simulation, or ' + modeIcon('playback', 'playback')
-      + ' to start/end playback of execution logs.',
+    modelNote: runNote,
 
     // expanding a token row shows what that token holds: its status, the data it reads, and the globals
     renderTokenDetail: createTokenDetailRenderer({ get: (name) => modeler.get(name) })
+  },
+  messagesPanel: {
+    // a run sends the messages, so in Model mode the tab says how a run is started, as the Tokens tab does
+    modelNote: runNote
   },
   mode: {
     // read-only outside Model mode, except for the execution data box (see `modeExceptions`)
@@ -121,6 +130,7 @@ const modeler = new BpmnModeler({
     TokenPanelModule,     // → "Tokens" tab (run/pause, speed, Load log)
     ModeModule,           // → mode.setMode('model'|'playback')
     ExecutionStateModule, // → `executionState`: status, data and globals per token, written by the player
+    MessagesModule,       // → the "Messages" tab
     EnginePlaybackModule  // → overrides `playback` with the native engine-log player (list last)
   ],
   moddleExtensions

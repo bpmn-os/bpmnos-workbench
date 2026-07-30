@@ -307,7 +307,16 @@ and the `globals` — so the user never has to collect information across panels
   primitive and use it for the **new** Messages panel + token status/data expansion first (zero risk to
   existing panels); migrate Issues/Tokens as a **separate scoped step with before/after visual checks**.
 
-### R3 · Messages side panel (the third stream type)
+### R3 · Messages side panel (the third stream type) — **built (step 1)**
+
+Built as `src/messages/`: the store of what a run has sent and not yet disposed of, keyed by the sending
+node and the sending instance, and the "Messages" tab drawing a row per message — BPMN's envelope with a
+bullet in the sending token's colour, the message name and the sender collapsed, the header and the
+contents expanded. The header reads as text rather than as string-pool numbers, the engine having gained a
+type per header key (sprint 02). The filter heading is drawn and inert; what remains of R3 is the token list
+in the expanded row and that filter, which is step 2 of sprint 03.
+
+### R3 · Messages side panel — the requirement as stated
 
 A side panel listing **messages** (the `{message: …}` stream entries), styled like the token list, with
 **expandable/collapsible rows**. Collapsed row shows **message name, sender, origin**; expanded shows

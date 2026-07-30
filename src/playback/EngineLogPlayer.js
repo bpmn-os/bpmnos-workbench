@@ -55,6 +55,9 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   // walks the log record by record, so it is the only one that knows which record the diagram is showing.
   this._executionState = injector.get('executionState', false);
 
+  // The store of the messages waiting, where a host provides one, on the same terms and for the same reason.
+  this._messages = injector.get('messages', false);
+
   this._log = null;
   this._state = 'idle'; // 'idle' | 'playing' | 'paused'
   this._paused = false;
@@ -198,8 +201,9 @@ EngineLogPlayer.prototype.play = async function(log) {
           index += Math.max(flows.length - 1, 0);
         } else if (entry.event) {
           await this._applyEvent(entry.event);
+        } else if (entry.message) {
+          this._applyMessage(entry.message);
         }
-        // message entries are not visualised yet
       }
     } catch (err) {
       if (!(err && err.aborted)) {
@@ -572,6 +576,22 @@ EngineLogPlayer.prototype._apply = function(record) {
   if (this._executionState) {
     this._executionState.apply(record);
   }
+};
+
+// Apply a message record: a message is held from the record creating it to the one delivering or
+// withdrawing it. The colour is read here rather than where the message is shown, because it is the colour
+// of the token that sent it and that token has moved on by the time a reader opens the message.
+EngineLogPlayer.prototype._applyMessage = function(record) {
+  if (this._messages) {
+    this._messages.apply(record, this._colorOf((record.header || {}).sender));
+  }
+};
+
+// The colour an instance's tokens wear, taken from any token of that instance.
+EngineLogPlayer.prototype._colorOf = function(label) {
+  const token = label && this._primitives.getTokens(token => token.label === label)[0];
+
+  return token ? token.color : null;
 };
 
 // Drop what dies with a token.

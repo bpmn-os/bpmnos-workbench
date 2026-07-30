@@ -1,0 +1,148 @@
+import { createCollapsibleEntry } from 'bpmn-js-side-panel';
+
+/**
+ * One message rendered as a side-panel entry, on the pattern of `bpmn-js-animation`'s token entry and in
+ * its classes, so that the two lists are one appearance rather than two that resemble each other.
+ *
+ * The summary is the colour of the token that sent the message, the envelope marking what the row is, the
+ * name of the message, and the instance that sent it. Expanding the row shows the header and the contents,
+ * each as a line of a key and its value, in the lines a token entry shows its attributes in.
+ *
+ * @param {Object} message  `{ name, sender, origin, color, header, content }`
+ * @param {Object} [options]
+ * @param {boolean} [options.open=false]  whether the row starts expanded
+ * @param {Function} [options.onToggle]   (open) => void
+ */
+export default function createMessageEntry(message, options = {}) {
+  const summary = el('span', 'bjs-token-summary');
+
+  const info = el('span', 'bjs-token-info');
+
+  info.appendChild(labelEl(message.name || ''));
+  info.appendChild(text('span', 'bjs-token-node', message.sender || ''));
+
+  summary.appendChild(envelopeEl(message));
+  summary.appendChild(info);
+
+  const entry = createCollapsibleEntry({
+    id: message.key,
+    label: summary,
+    open: !!options.open,
+    toggleOn: 'caret',
+    onToggle: options.onToggle
+  });
+
+  entry.element.classList.add('bjs-token-entry');
+
+  section(entry.contentEl, 'Header', message.header);
+  section(entry.contentEl, 'Content', message.content);
+
+  return entry;
+}
+
+/**
+ * One section of the expanded row. A key the run left without a value is shown as such rather than left
+ * out, an unset header entry being what a message is matched on by any value.
+ */
+function section(parent, label, values) {
+  const entry = createCollapsibleEntry({ label, open: true, caretSide: 'left' }),
+        keys = Object.keys(values || {});
+
+  if (!keys.length) {
+    entry.contentEl.appendChild(text('div', 'wb-attribute', 'None.'));
+  }
+
+  keys.forEach(function(key) {
+    const line = el('div', 'wb-attribute'),
+          value = values[key],
+          unset = value === null || value === undefined;
+
+    line.appendChild(text('span', 'wb-attribute-name', key));
+    line.appendChild(text('span', 'wb-attribute-value' + (unset ? ' wb-attribute-null' : ''),
+      unset ? 'undefined' : String(value)));
+
+    entry.contentEl.appendChild(line);
+  });
+
+  parent.appendChild(entry.element);
+}
+
+/**
+ * The message itself: BPMN's envelope, carrying a bullet in the colour of the token that sent it.
+ *
+ * The envelope is the path BPMN draws a message with, `MESSAGE_FLOW_MARKER` of bpmn-js's `PathMap`, which
+ * is an envelope of 21 by 14 about its own centre, so that a message reads here as it reads on a diagram.
+ * The bullet sits at that centre, and both are one drawing rather than an icon with something placed over
+ * it, which is what keeps them together at any size and needs nothing of a stylesheet.
+ */
+function envelopeEl(message) {
+  const svg = document.createElementNS(SVG, 'svg');
+
+  // the box holds the envelope and the bullet overlapping its lower right corner, and the drawing keeps
+  // the size the envelope alone had, so a row's height is unchanged
+  svg.setAttribute('viewBox', '-11 -7.5 27 20');
+  svg.setAttribute('width', '23');
+  svg.setAttribute('height', '17');
+  svg.setAttribute('aria-hidden', 'true');
+
+  if (message.origin) {
+    const title = document.createElementNS(SVG, 'title');
+
+    title.textContent = message.origin;
+    svg.appendChild(title);
+  }
+
+  const envelope = document.createElementNS(SVG, 'path');
+
+  envelope.setAttribute('d', 'M -10.5,-7 l 0,14 l 21,0 l 0,-14 z m 0,0 l 10.5,6 l 10.5,-6');
+  envelope.setAttribute('fill', 'none');
+  envelope.setAttribute('stroke', 'currentColor');
+  envelope.setAttribute('stroke-width', '1');
+
+  const bullet = document.createElementNS(SVG, 'circle');
+
+  bullet.setAttribute('cx', '10.5');
+  bullet.setAttribute('cy', '7');
+  bullet.setAttribute('r', '5');
+  bullet.setAttribute('fill', message.color || '#888');
+  bullet.setAttribute('stroke', 'rgba(0, 0, 0, 0.2)');
+  bullet.setAttribute('stroke-width', '1');
+
+  svg.appendChild(envelope);
+  svg.appendChild(bullet);
+
+  return svg;
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+
+function el(tag, className) {
+  const node = document.createElement(tag);
+
+  if (className) {
+    node.className = className;
+  }
+
+  return node;
+}
+
+function text(tag, className, string) {
+  const node = el(tag, className);
+
+  node.textContent = string;
+
+  return node;
+}
+
+// the name truncates in the middle, as a token's label does, so that its head and its tail both stay
+// visible however narrow the panel is
+function labelEl(label) {
+  const wrap = el('span', 'bjs-token-label'),
+        tail = Math.min(6, Math.floor(label.length / 2));
+
+  wrap.title = label;
+  wrap.appendChild(text('span', 'bjs-token-label-head', label.slice(0, label.length - tail)));
+  wrap.appendChild(text('span', 'bjs-token-label-tail', label.slice(label.length - tail)));
+
+  return wrap;
+}
