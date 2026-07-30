@@ -27,7 +27,19 @@ label and `Timestamp` being the clock on the canvas. The Tokens tab is given the
 `config.tokenPanel.renderTokenDetail`, which `bpmn-js-animation` reads as it builds its lists, so the
 renderer is passed at construction and creates its view on the first row it draws. The repository has an
 `exports` map on the pattern `bpmn-workbench` uses, offering `./execution-state` and its three pieces,
-`./playback` and `./greedy`; `bpmnos-js` must never consume them, the reverse edge being a cycle. The design and the reasoning behind it are recorded in
+`./playback` and `./greedy`; `bpmnos-js` must never consume them, the reverse edge being a cycle.
+
+The canvas carries `bpmnos-js/annotation`, whose execution data box stays usable while a run is on: the
+workbench declares that through `config.mode.exceptions`, which `bpmn-js-animation` reads to decide what a
+read-only mode still permits, and `bpmnos-js`'s `annotationRole` says which elements those permissions are
+about. The Properties tab shows a note there instead of its fields, through `bpmn-js-side-panel`'s
+`setNote`, and a mode switch leaves the reader on the tab they were on.
+
+`EngineLogPlayer` gathers the departures of one token at one node and draws them as one fork, since the
+engine copies a token per outgoing flow at every diverging gateway but the exclusive one. Instance
+identifiers are the engine's own: a multi-instance copy reports its own until it dies, which the engine was
+corrected to do (`MI-activity instance token keep their data until DONE`), so the workbench needs no special
+case for it. The design and the reasoning behind it are recorded in
 `~/Code/bpmnos/Next sprint.md`, decisions D1 to D7.
 
 A Vite app (`npm run dev` / `build` / `preview`; `node >=22`)
