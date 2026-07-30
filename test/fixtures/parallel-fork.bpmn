@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A process whose token leaves one node by two flows at once, which is what every diverging gateway but the
+  exclusive one does. No diagram interchange: the tests read the moddle tree alone.
+-->
+<bpmn2:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmnos="https://bpmnos.telematique.eu" id="parallel-fork" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn2:process id="ForkProcess" isExecutable="true">
+    <bpmn2:extensionElements>
+      <bpmnos:status>
+        <bpmnos:attributes>
+          <bpmnos:attribute id="Timestamp" type="decimal" name="timestamp" />
+          <bpmnos:attribute id="Status_Note" type="string" name="note" />
+        </bpmnos:attributes>
+      </bpmnos:status>
+    </bpmn2:extensionElements>
+    <bpmn2:dataObject id="DataObject_Fork">
+      <bpmn2:extensionElements>
+        <bpmnos:attributes>
+          <bpmnos:attribute id="Instance" type="string" name="instance" />
+        </bpmnos:attributes>
+      </bpmn2:extensionElements>
+    </bpmn2:dataObject>
+    <bpmn2:startEvent id="Start">
+      <bpmn2:outgoing>Flow_start</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:sequenceFlow id="Flow_start" sourceRef="Start" targetRef="Fork" />
+    <bpmn2:parallelGateway id="Fork">
+      <bpmn2:incoming>Flow_start</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_a</bpmn2:outgoing>
+      <bpmn2:outgoing>Flow_b</bpmn2:outgoing>
+    </bpmn2:parallelGateway>
+    <bpmn2:sequenceFlow id="Flow_a" sourceRef="Fork" targetRef="TaskA" />
+    <bpmn2:sequenceFlow id="Flow_b" sourceRef="Fork" targetRef="TaskB" />
+    <bpmn2:task id="TaskA">
+      <bpmn2:incoming>Flow_a</bpmn2:incoming>
+    </bpmn2:task>
+    <bpmn2:task id="TaskB">
+      <bpmn2:incoming>Flow_b</bpmn2:incoming>
+    </bpmn2:task>
+  </bpmn2:process>
+</bpmn2:definitions>

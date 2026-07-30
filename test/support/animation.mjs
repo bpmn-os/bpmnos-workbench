@@ -8,19 +8,34 @@
  * same event bus at the same moments.
  */
 export function createAnimation(eventBus, elementRegistry) {
-  const tokens = new Map(); // node -> Map of label to token
+  // node -> Map of key to token, the key being the label and, for a token resting on a flow, that flow:
+  // the branches of a fork are several tokens of one label at one node, told apart by the flow they sit on
+  const tokens = new Map();
   const calls = [];
 
   const at = (node) => tokens.get(node) || new Map();
 
-  const add = (node, label) => {
+  const key = (label, sequenceFlow) => label + '|' + (sequenceFlow || '');
+
+  const add = (node, label, sequenceFlow) => {
     const held = at(node);
 
-    held.set(label, { node, label });
+    held.set(key(label, sequenceFlow), { node, label, sequenceFlow });
     tokens.set(node, held);
   };
 
-  const drop = (node, label) => at(node).delete(label);
+  const drop = (node, label, sequenceFlow) => at(node).delete(key(label, sequenceFlow));
+
+  // any token of that label at the node, whichever flow it rests on
+  const find = (node, label) =>
+    [ ...at(node).values() ].find((token) => token.label === label);
+
+  // the flows leaving a node, which is what tells a branch of a fork from the token that arrived
+  const outgoing = (node) => {
+    const element = elementRegistry.get(node);
+
+    return ((element && element.businessObject.get('outgoing')) || []).map((flow) => flow.id);
+  };
 
   // the node a sequence flow leads to, which is where a hop puts the token
   const target = (flow) => {
@@ -33,11 +48,37 @@ export function createAnimation(eventBus, elementRegistry) {
   return {
     calls,
 
-    getToken: (node, label) => at(node).get(label),
+    getToken: (node, label) => find(node, label),
 
     createToken({ node, label, parentNode, parentLabel }) {
       calls.push({ call: 'createToken', node, label, parentNode, parentLabel });
       add(node, label);
+    },
+
+    // places a branch on an outflow at the node without travelling it, the first taking the token that was
+    // resting there and each later one standing beside it
+    forkToken({ node, label, sequenceFlow }) {
+      calls.push({ call: 'forkToken', node, label, sequenceFlow });
+
+      const outflows = outgoing(node);
+
+      const branched = [ ...at(node).values() ]
+        .some((token) => token.label === label && outflows.includes(token.sequenceFlow));
+
+      // the first fork takes the token resting at the node, wherever it rests; a later one stands beside it
+      if (!branched) {
+        const resting = find(node, label);
+
+        if (!resting) {
+          throw new Error('forkToken: no token <' + label + '> at <' + node + '>');
+        }
+
+        drop(node, label, resting.sequenceFlow);
+      }
+
+      add(node, label, sequenceFlow);
+
+      return Promise.resolve();
     },
 
     advanceToken({ node, label, sequenceFlow, position }) {
@@ -46,8 +87,14 @@ export function createAnimation(eventBus, elementRegistry) {
       const to = sequenceFlow && target(sequenceFlow);
 
       if (to) {
-        drop(node, label);
-        add(to, label);
+        const branch = at(node).get(key(label, sequenceFlow)) || find(node, label);
+
+        if (!branch) {
+          throw new Error('advanceToken: no token <' + label + '> at <' + node + '>');
+        }
+
+        drop(node, label, branch.sequenceFlow);
+        add(to, label, sequenceFlow);
         eventBus.fire('token.moved', { token: { node: to, label }, label, from: node, to });
       }
 
@@ -55,10 +102,10 @@ export function createAnimation(eventBus, elementRegistry) {
     },
 
     consumeToken({ node, label }) {
-      const token = at(node).get(label);
+      const token = find(node, label);
 
       calls.push({ call: 'consumeToken', node, label });
-      drop(node, label);
+      drop(node, label, token && token.sequenceFlow);
       eventBus.fire('token.removed', { token: token || { node, label } });
 
       return Promise.resolve();

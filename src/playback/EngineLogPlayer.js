@@ -181,10 +181,21 @@ EngineLogPlayer.prototype.play = async function(log) {
   const entries = this._log;
   this._run = (async () => {
     try {
-      for (const entry of entries) {
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index];
+
         await this._gate();
         if (entry.token) {
-          await this._applyToken(entry.token);
+          // A token leaving a node by several flows at once is reported as one departure per flow, one
+          // after the other: the engine makes a copy of the token per outgoing flow and advances each
+          // (`StateMachine::createTokenCopies`), which is how every diverging gateway but the exclusive
+          // one departs. Taken one at a time the first would carry the token away and the rest would find
+          // nothing left, so the departures of one token at one node are gathered here and drawn as the
+          // one fork they are.
+          const flows = departures(entries, index);
+
+          await this._applyToken(entry.token, flows);
+          index += Math.max(flows.length - 1, 0);
         } else if (entry.event) {
           await this._applyEvent(entry.event);
         }
@@ -264,13 +275,39 @@ EngineLogPlayer.prototype._applyEvent = async function(event) {
   }
 };
 
-EngineLogPlayer.prototype._applyToken = async function(token) {
+// The flows one token departs a node by, taken from the departure at `index` and every departure
+// immediately following it for the same token at the same node. Empty for anything that is not a
+// departure along a flow, in which case the record is drawn as itself.
+function departures(entries, index) {
+  const first = entries[index].token;
+
+  if (first.state !== 'DEPARTED' || !first.sequenceFlowId) {
+    return [];
+  }
+
+  const flows = [ first.sequenceFlowId ];
+
+  for (let next = index + 1; next < entries.length; next++) {
+    const token = entries[next].token;
+
+    if (!token || token.state !== 'DEPARTED' || !token.sequenceFlowId ||
+        token.instanceId !== first.instanceId || token.nodeId !== first.nodeId) {
+      break;
+    }
+
+    flows.push(token.sequenceFlowId);
+  }
+
+  return flows;
+}
+
+EngineLogPlayer.prototype._applyToken = async function(token, flows) {
   try {
     // Serialise behind the stack/auto-focus reveal arc (600ms): settle any in-flight arc BEFORE this
     // step (so a createToken doesn't add a dot mid-arc — createToken, unlike advanceToken, doesn't wait
     // on its own), then let this step's own arc settle before the next entry runs.
     await this._animation.whenFocused();
-    await this._resolve(token);
+    await this._resolve(token, flows);
     await this._animation.whenFocused();
   } catch (err) {
     // a single mis-resolved entry must not tear down the whole run — report it and carry on
@@ -281,7 +318,7 @@ EngineLogPlayer.prototype._applyToken = async function(token) {
   // so feeding it to the clock would reset the readout mid-run — do not use it here.
 };
 
-EngineLogPlayer.prototype._resolve = async function(token) {
+EngineLogPlayer.prototype._resolve = async function(token, flows) {
   const { instanceId, nodeId, sequenceFlowId, state } = token;
   const label = instanceId;
   const node = nodeId || token.processId; // a process/scope-level token keys on the process id
@@ -345,8 +382,10 @@ EngineLogPlayer.prototype._resolve = async function(token) {
       case 'DONE':
       case 'WITHDRAWN':
       case 'FAILED':
+        // the main thread ends: with no outgoing flow it is DONE where it stands, and an interruption
+        // withdraws or fails it. Either way it rests on its inflow, which `_consume` accounts for.
         this._forget(node, label);
-        return anim.getToken(node, label) ? anim.consumeToken({ node, label }) : undefined;
+        return this._consume(node, label);
       case 'FAILING':
         this._error(node, label);
         return;
@@ -419,6 +458,9 @@ EngineLogPlayer.prototype._resolve = async function(token) {
 
     case 'DEPARTED':
       // a flow hop: travel along the sequence flow to the far node (departure/arrival ride the flow)
+      if (flows && flows.length > 1) {
+        return this._departAll(node, label, flows);
+      }
       if (sequenceFlowId) {
         return anim.advanceToken({ node, label, sequenceFlow: sequenceFlowId });
       }
@@ -444,10 +486,7 @@ EngineLogPlayer.prototype._resolve = async function(token) {
       // container stands. Evicting here rather than leaving it to `token.removed` also covers a token the
       // animation never held, which fires no such event.
       this._forget(node, label);
-      if (anim.getToken(node, label)) {
-        return anim.consumeToken({ node, label });
-      }
-      return;
+      return this._consume(node, label);
 
     case 'FAILING':
       // a failing scope, unwinding its children — flash the error effect (R1: emit error icon)
@@ -457,6 +496,30 @@ EngineLogPlayer.prototype._resolve = async function(token) {
     default:
       return;
   }
+};
+
+/**
+ * Depart a node by several flows at once, which is what a diverging gateway other than an exclusive one
+ * does: the engine copies the token per outgoing flow, so the animation forks.
+ *
+ * `forkToken` places a branch on an outflow without travelling it, the first one moving the token that was
+ * resting at the gateway and each later one cloning a sibling, so the placing is sequential; the travelling
+ * is not, the branches leaving together as they do in the engine, where the copies are advanced in one
+ * step. Nothing is left at the gateway, which is the engine's own behaviour for a parallel gateway and
+ * differs for an event-based one only in that the engine keeps its token there until a branch is triggered
+ * and then completes it; that record then finds nothing to consume, which a death already tolerates.
+ *
+ * It is keyed on the departures rather than on the kind of gateway, so an inclusive gateway is drawn the
+ * same way on the day the engine advances one.
+ */
+EngineLogPlayer.prototype._departAll = async function(node, label, flows) {
+  const anim = this._animation;
+
+  for (const sequenceFlow of flows) {
+    await anim.forkToken({ node, label, sequenceFlow });
+  }
+
+  return Promise.all(flows.map(sequenceFlow => anim.advanceToken({ node, label, sequenceFlow })));
 };
 
 // Create a token that appears at a node without arriving via a flow. Only the process/scope instance
@@ -476,6 +539,27 @@ EngineLogPlayer.prototype._birth = function(node, label, element) {
     console.warn('[enginePlayback] birth createToken failed', node, label, err);
     return false;
   }
+};
+
+/**
+ * Consume the token at a node, wherever it rests.
+ *
+ * A token anchored at the node is consumed by naming the node alone, while one resting on a sequence flow —
+ * a token that has arrived and not yet entered, or the main thread of a multi-instance activity parked on
+ * its inflow — has to name that flow, the animation refusing to consume a resting token by the node alone
+ * so that a caller cannot take away the wrong one. A token the animation does not hold is nothing to
+ * consume, which is the case for every node it draws no token at.
+ */
+EngineLogPlayer.prototype._consume = function(node, label) {
+  const token = this._animation.getToken(node, label);
+
+  if (!token) {
+    return undefined;
+  }
+
+  const sequenceFlow = token.state && token.state.sequenceFlow;
+
+  return this._animation.consumeToken(sequenceFlow ? { node, label, sequenceFlow } : { node, label });
 };
 
 // --- the value store ---------------------------------------------------------
