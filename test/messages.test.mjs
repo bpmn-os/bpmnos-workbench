@@ -177,7 +177,7 @@ test('a row is the message name and its sender, marked with an envelope in the s
   assert.equal(row.querySelector('svg circle').getAttribute('fill'), '#c0392b');
 });
 
-test('an expanded row shows the header and the contents, an entry without a value included', async () => {
+test('an expanded row shows the origin, the header and the contents', async () => {
   const store = new MessageStore();
 
   store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M1' }, { Duration: '24' }));
@@ -186,9 +186,22 @@ test('an expanded row shows the header and the contents, an entry without a valu
 
   const lines = [ ...body.querySelectorAll('.wb-attribute') ].map((line) => line.textContent);
 
+  assert.equal(lines[0], 'OriginSendTask', 'the node it was sent from, above the header');
   assert.ok(lines.some((line) => /machineM1/.test(line)), 'a header entry');
   assert.ok(lines.some((line) => /recipientundefined/.test(line)), 'an entry the run left unset');
   assert.ok(lines.some((line) => /Duration24/.test(line)), 'a content');
+});
+
+test('the header does not repeat what the collapsed row states', async () => {
+  const store = new MessageStore();
+
+  store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M1' }));
+
+  const { body } = await panel(store);
+
+  const names = [ ...body.querySelectorAll('.wb-attribute-name') ].map((name) => name.textContent);
+
+  assert.deepEqual(names, [ 'Origin', 'recipient', 'machine' ]);
 });
 
 test('the tab is drawn again when the store announces a change', async () => {

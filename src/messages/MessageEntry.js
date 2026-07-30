@@ -4,9 +4,10 @@ import { createCollapsibleEntry } from 'bpmn-js-side-panel';
  * One message rendered as a side-panel entry, on the pattern of `bpmn-js-animation`'s token entry and in
  * its classes, so that the two lists are one appearance rather than two that resemble each other.
  *
- * The summary is the colour of the token that sent the message, the envelope marking what the row is, the
- * name of the message, and the instance that sent it. Expanding the row shows the header and the contents,
- * each as a line of a key and its value, in the lines a token entry shows its attributes in.
+ * The summary is the envelope marking what the row is, in the colour of the token that sent the message,
+ * the name of the message, and the instance that sent it. Expanding the row shows the node the message was
+ * sent from, then the header and the contents, each as a line of a key and its value, in the lines a token
+ * entry shows its attributes in. The header omits the name and the sender, which the summary states.
  *
  * @param {Object} message  `{ name, sender, origin, color, header, content }`
  * @param {Object} [options]
@@ -34,11 +35,16 @@ export default function createMessageEntry(message, options = {}) {
 
   entry.element.classList.add('bjs-token-entry');
 
-  section(entry.contentEl, 'Header', message.header);
+  entry.contentEl.appendChild(line('Origin', message.origin));
+
+  section(entry.contentEl, 'Header', omit(message.header, SHOWN_IN_SUMMARY));
   section(entry.contentEl, 'Content', message.content);
 
   return entry;
 }
+
+// what the collapsed row already says, and which the header therefore does not repeat
+const SHOWN_IN_SUMMARY = [ 'name', 'sender' ];
 
 /**
  * One section of the expanded row. A key the run left without a value is shown as such rather than left
@@ -52,19 +58,25 @@ function section(parent, label, values) {
     entry.contentEl.appendChild(text('div', 'wb-attribute', 'None.'));
   }
 
-  keys.forEach(function(key) {
-    const line = el('div', 'wb-attribute'),
-          value = values[key],
-          unset = value === null || value === undefined;
-
-    line.appendChild(text('span', 'wb-attribute-name', key));
-    line.appendChild(text('span', 'wb-attribute-value' + (unset ? ' wb-attribute-null' : ''),
-      unset ? 'undefined' : String(value)));
-
-    entry.contentEl.appendChild(line);
-  });
+  keys.forEach((key) => entry.contentEl.appendChild(line(key, values[key])));
 
   parent.appendChild(entry.element);
+}
+
+/** One line of a name and its value, as a token entry shows an attribute. */
+function line(name, value) {
+  const row = el('div', 'wb-attribute'),
+        unset = value === null || value === undefined;
+
+  row.appendChild(text('span', 'wb-attribute-name', name));
+  row.appendChild(text('span', 'wb-attribute-value' + (unset ? ' wb-attribute-null' : ''),
+    unset ? 'undefined' : String(value)));
+
+  return row;
+}
+
+function omit(values, keys) {
+  return Object.fromEntries(Object.entries(values || {}).filter(([ key ]) => !keys.includes(key)));
 }
 
 /**
@@ -84,13 +96,6 @@ function envelopeEl(message) {
   svg.setAttribute('width', '23');
   svg.setAttribute('height', '17');
   svg.setAttribute('aria-hidden', 'true');
-
-  if (message.origin) {
-    const title = document.createElementNS(SVG, 'title');
-
-    title.textContent = message.origin;
-    svg.appendChild(title);
-  }
 
   const envelope = document.createElementNS(SVG, 'path');
 
