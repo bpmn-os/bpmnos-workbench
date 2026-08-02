@@ -131,7 +131,7 @@ numbers/strings.
 - **Vite serves `bpmnos.wasm` as a separate asset** — the worker resolves it via
   `new URL('bpmnos.wasm', import.meta.url)`, and `@bpmn-os/bpmnos-wasm` is **excluded from `optimizeDeps`**
   in `vite.config.js` so the glue's relative wasm URL survives (do not inline).
-- **The Engine runs in a Web Worker** (`src/greedy/engine-worker.js`; `run`/`resume` block). Greedy is
+- **The Engine runs in a Web Worker** (`src/engine/engine-worker.js`; `run`/`resume` block). Greedy is
   autonomous (null controller) and its `Monitor` entries arrive in one burst, collected and replayed.
 
 ## Modes & toggles (three animation modes)

@@ -10,7 +10,7 @@ side-panel design, the `bpmnos-wasm` API contract, requirements R1–R5, and wor
 
 **Playback and greedy simulation are built, and the value store and its view are being added.** The
 statements further down that greedy simulation and the wasm engine are "not built yet" are out of date:
-`src/greedy/EngineRunner.js` runs the engine in a Web Worker and `@bpmn-os/bpmnos-wasm` is a declared
+`src/engine/EngineRunner.js` runs the engine in a Web Worker and `@bpmn-os/bpmnos-wasm` is a declared
 dependency. The repository now has tests, `test/*.test.mjs` under `node --test`, whose fixtures are models
 parsed with `bpmn-moddle` and whose registries come from `bpmnos-js/collect-execution-data`, so a module is
 testable without a diagram. Everything under `src/` is written so that Node can resolve it: a relative import
@@ -27,7 +27,7 @@ label and `Timestamp` being the clock on the canvas. The Tokens tab is given the
 `config.tokenPanel.renderTokenDetail`, which `bpmn-js-animation` reads as it builds its lists, so the
 renderer is passed at construction and creates its view on the first row it draws. The repository has an
 `exports` map on the pattern `bpmn-workbench` uses, offering `./execution-state` and its three pieces,
-`./playback` and `./greedy`; `bpmnos-js` must never consume them, the reverse edge being a cycle.
+`./playback`, `./engine`, `./input` and `./greedy`; `bpmnos-js` must never consume them, the reverse edge being a cycle.
 
 The canvas carries `bpmnos-js/annotation`, whose execution data box stays usable while a run is on: the
 workbench declares that through `config.mode.exceptions`, which `bpmn-js-animation` reads to decide what a
@@ -49,8 +49,8 @@ rules/issues/toolbar, and **native playback of BPMN-OS engine execution logs**. 
 diagram** — nothing is hardwired: load a model with the toolbar and an engine `-log.json` with the Tokens
 tab's "Load log". `src/examples/earliest-arrival.{bpmn,-log.json}` (the EAP instance from
 `BPMNOSInstances.jl`) is a loadable sample, not auto-loaded, and the tests play that very log. Manual
-(interactive) simulation is **not** built yet; greedy simulation runs the wasm engine live (`src/greedy/`)
-and playback replays a recorded `-log.json`.
+(interactive) simulation is **not** built yet; greedy simulation runs the wasm engine live (`src/greedy/`,
+through `src/engine/` and `src/input/`) and playback replays a recorded `-log.json`.
 
 **Reuse upstream, don't reinvent.** The playback UI is bpmn-js-animation's own **TokenPanel** (the
 "Tokens" side-panel tab: run/pause, speed, Load log); the mode toggle uses bpmn-workbench's mode-button
@@ -74,6 +74,14 @@ Key source (this repo):
   A listener that clears must not *return* the clearance: diagram-js stops an event a listener answers, and
   returning from `diagram.clear` kept the canvas from hearing it, which surfaced as `rootDi is undefined`
   from `saveXML`.
+- `src/engine/` — the wasm engine and nothing about who drives it: `engine-worker.js` (the Web Worker that
+  assembles an `Input` and runs the engine, `Engine.run` being a blocking call) and `EngineRunner.js` (the
+  promise-based wrapper the page holds, one request in flight at a time).
+- `src/input/` — what a run is given: the "Input" entry holding the instance table and one table per lookup
+  the model references, each editable in place. It hands its element back rather than mounting it, so the
+  same provider serves any source and any place it is shown.
+- `src/greedy/` — the greedy source: the seed, the cached log, and the log source the transport pulls on
+  play. It mounts the input provider and runs through `src/engine/`, and owns neither.
 - `src/execution-state/` — the values a run produces: `Store.js` (plain, registry-taking, node-testable),
   `index.js` (the `executionState` service, riding the animation's token events), `sections.js` (the rows a
   token entry shows), `View.js` + `execution-state.css` (the body, kept current in place). Requires

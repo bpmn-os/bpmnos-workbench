@@ -12,6 +12,9 @@
     "./execution-state/execution-state.css": "./src/execution-state/execution-state.css",
     "./playback": "./src/playback/index.js",
     "./playback/*": "./src/playback/*",
+    "./engine": "./src/engine/EngineRunner.js",
+    "./input": "./src/input/index.js",
+    "./input/input.css": "./src/input/input.css",
     "./greedy": "./src/greedy/index.js",
     "./greedy/*": "./src/greedy/*"
   },
