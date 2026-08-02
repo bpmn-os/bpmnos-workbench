@@ -307,14 +307,20 @@ and the `globals` — so the user never has to collect information across panels
   primitive and use it for the **new** Messages panel + token status/data expansion first (zero risk to
   existing panels); migrate Issues/Tokens as a **separate scoped step with before/after visual checks**.
 
-### R3 · Messages side panel (the third stream type) — **built (step 1)**
+### R3 · Messages side panel (the third stream type) — **built**
 
 Built as `src/messages/`: the store of what a run has sent and not yet disposed of, keyed by the sending
 node and the sending instance, and the "Messages" tab drawing a row per message — BPMN's envelope with a
-bullet in the sending token's colour, the message name and the sender collapsed, the header and the
-contents expanded. The header reads as text rather than as string-pool numbers, the engine having gained a
-type per header key (sprint 02). The filter heading is drawn and inert; what remains of R3 is the token list
-in the expanded row and that filter, which is step 2 of sprint 03.
+bullet in the sending token's colour, the message name and the sender collapsed, the origin, the header and
+the contents expanded. The header reads as text rather than as string-pool numbers, the engine having gained
+a type per header key (sprint 02).
+
+The tokens that may receive a message, and the filter over them, are **not** part of this and belong to
+interactive simulation. Which tokens may receive a message can only be answered by an engine standing at the
+step being shown, and a greedy run has finished replaying by then while playback holds no engine at all;
+reproducing the engine's matching in JavaScript, recording it in the log, or keeping it beside the run were
+each weighed and rejected in sprint 03. The filter is therefore not drawn, and `addFilter` in
+`src/messages/Panel.js` builds it for the day it can mean something.
 
 ### R3 · Messages side panel — the requirement as stated
 

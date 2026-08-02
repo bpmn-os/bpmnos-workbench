@@ -49,13 +49,14 @@ MessagesPanel.prototype._init = function() {
 };
 
 /**
- * The frame of the tab: a heading naming what is listed and how it is filtered, above the region the list
- * scrolls in.
+ * The frame of the tab: a heading naming what is listed, above the region the list scrolls in.
  *
  * It is built from the classes the Tokens tab is built from, `bjs-token-filter` over `bjs-token-inspector`
  * within `bjs-token`, so that the two tabs are one appearance rather than two that resemble each other.
- * The filter is drawn and does nothing yet; what it will select is which messages are shown, and that
- * follows the token list it is named after.
+ *
+ * The heading carries no filter yet. Filtering the messages by the tokens a reader has selected means
+ * knowing which tokens may receive a message, and only an engine standing at the step being shown can say,
+ * which is interactive simulation. {@link addFilter} builds it and is called from here when that arrives.
  */
 MessagesPanel.prototype._build = function() {
   const root = document.createElement('div');
@@ -70,20 +71,6 @@ MessagesPanel.prototype._build = function() {
 
   title.textContent = 'Messages';
   heading.appendChild(title);
-
-  [ [ 'all', 'all' ], [ 'recipients', 'selected recipients' ] ].forEach(([ value, label ], index) => {
-    const option = document.createElement('label'),
-          radio = document.createElement('input');
-
-    radio.type = 'radio';
-    radio.name = 'wb-message-filter';
-    radio.value = value;
-    radio.checked = index === 0;
-
-    option.appendChild(radio);
-    option.appendChild(document.createTextNode(' ' + label));
-    heading.appendChild(option);
-  });
 
   this._inspector = document.createElement('div');
   this._inspector.className = 'bjs-token-inspector';
@@ -131,6 +118,31 @@ MessagesPanel.prototype._render = function() {
     this._inspector.appendChild(entry.element);
   });
 };
+
+/**
+ * Adds the filter to a heading: which messages are listed, all of them or those the selected tokens may
+ * receive. Not called yet, since the tokens that may receive a message are what interactive simulation will
+ * answer; it is kept so that showing the filter is one call rather than a heading rebuilt from memory.
+ *
+ * @param {Element} heading  the heading built by {@link MessagesPanel#_build}
+ * @param {Function} onChange  (value) => void, called with 'all' or 'recipients'
+ */
+export function addFilter(heading, onChange) {
+  [ [ 'all', 'all' ], [ 'recipients', 'selected recipients' ] ].forEach(([ value, label ], index) => {
+    const option = document.createElement('label'),
+          radio = document.createElement('input');
+
+    radio.type = 'radio';
+    radio.name = 'wb-message-filter';
+    radio.value = value;
+    radio.checked = index === 0;
+    radio.addEventListener('change', () => radio.checked && onChange(value));
+
+    option.appendChild(radio);
+    option.appendChild(document.createTextNode(' ' + label));
+    heading.appendChild(option);
+  });
+}
 
 /**
  * The note shown in place of the tab's content while the workbench is modelling. The mode service is
