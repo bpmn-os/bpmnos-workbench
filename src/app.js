@@ -38,6 +38,7 @@ import EnginePlaybackModule from './playback/index.js';
 import ExecutionStateModule, { createTokenDetailRenderer } from './execution-state/index.js';
 import MessagesModule from './messages/index.js';        // → the "Messages" tab
 import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
+import createManual from './manual/index.js';           // manual simulation: the user advances the run
 import createModeButtons, { modeIcon } from './mode-buttons.js';
 import createClock from './clock.js';               // on-canvas simulation clock (top-right)
 
@@ -84,7 +85,8 @@ const modeExceptions = [ {
 // set the properties panel's own `parent`); IssuesPanelModule adds "Issues", TokenPanelModule adds "Tokens".
 // Both tabs a run concerns say the same thing while there is no run: how one is started. The icons are the
 // on-canvas mode buttons' own, and a click on one switches source through the same path they do.
-const runNote = 'Click ' + modeIcon('greedy', 'greedy')
+const runNote = 'Click ' + modeIcon('manual', 'manual')
+  + ' to simulate manually, ' + modeIcon('greedy', 'greedy')
   + ' to start/end a greedy simulation, or ' + modeIcon('playback', 'playback')
   + ' to start/end playback of execution logs.';
 
@@ -169,12 +171,15 @@ modeler.on('mode.changed', ({ mode }) => {
   }
 });
 
-// The on-canvas mode toggles: greedy simulation (microchip, runs the wasm engine) and playback (play).
-const greedy = createGreedy(modeler);
-createModeButtons(modeler, greedy);
+// On-canvas simulation clock (top-right): the current clock-tick time, and, while the user drives the run,
+// the control that advances it.
+const clock = createClock(modeler);
 
-// On-canvas simulation clock (top-right): the current clock-tick time, shown during greedy / playback.
-createClock(modeler);
+// The on-canvas mode toggles: manual simulation (a hand, the user advances the run), greedy simulation
+// (microchip, runs the wasm engine to the end) and playback (play).
+const greedy = createGreedy(modeler);
+const manual = createManual(modeler, clock);
+createModeButtons(modeler, greedy, manual);
 
 // Optional deep-linking: ?src=<url> loads a diagram on startup.
 const src = new URL(window.location.href).searchParams.get('src');

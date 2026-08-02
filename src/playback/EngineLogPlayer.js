@@ -66,6 +66,8 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   this._run = Promise.resolve();
   this._time = null;
   this._logSource = null; // optional consumer hook: yields a log on demand (see setLogSource)
+  this._streaming = false; // a run is arriving as it happens (see startStream)
+  this._arrival = null;    // resolver awaited by the loop when it has caught up with what has arrived
 
   // abort a run if the diagram is swapped out from under it
   eventBus.on([ 'diagram.clear', 'diagram.destroy' ], () => {
@@ -86,12 +88,53 @@ EngineLogPlayer.prototype.setLog = function(log) {
 };
 
 EngineLogPlayer.prototype.hasLog = function() {
-  return !!(this._log && this._log.length);
+  return this._streaming || !!(this._log && this._log.length);
 };
 
 /** The log currently loaded/playing (loaded file or a greedy run), for the panel's "Save log". */
 EngineLogPlayer.prototype.getLog = function() {
   return this._log;
+};
+
+/**
+ * Begin playing a run that is still being produced. The player holds a log that grows: `push` adds what has
+ * just arrived and `endStream` says that no more will. Everything else — the transport, the pacing, the
+ * store, the messages — is as it is for a recorded log, since a record is a record however it got here.
+ */
+EngineLogPlayer.prototype.startStream = function() {
+  this._streaming = true;
+  this._log = [];
+  return this.play();
+};
+
+/** Append records of a run in progress, waking the player if it has caught up. */
+EngineLogPlayer.prototype.push = function(entries) {
+  if (!entries || !entries.length) {
+    return;
+  }
+  // appended in place: the loop holds this very array, so a fresh one would never reach it
+  this._log.push(...entries);
+  this._wake();
+};
+
+/** No more records are coming: the player finishes what it holds and stops. */
+EngineLogPlayer.prototype.endStream = function() {
+  this._streaming = false;
+  this._wake();
+};
+
+EngineLogPlayer.prototype.isStreaming = function() {
+  return this._streaming;
+};
+
+EngineLogPlayer.prototype._wake = function() {
+  const arrival = this._arrival;
+
+  this._arrival = null;
+
+  if (arrival) {
+    arrival();
+  }
 };
 
 EngineLogPlayer.prototype.getState = function() {
@@ -184,7 +227,17 @@ EngineLogPlayer.prototype.play = async function(log) {
   const entries = this._log;
   this._run = (async () => {
     try {
-      for (let index = 0; index < entries.length; index++) {
+      for (let index = 0; ; index++) {
+        // A stream is played as it arrives: having caught up is not the end of it, so the loop waits for
+        // the next records and ends only when the run says there are no more.
+        while (index >= entries.length) {
+          if (!this._streaming) {
+            return;
+          }
+          await new Promise(resolve => { this._arrival = resolve; });
+          await this._gate();
+        }
+
         const entry = entries[index];
 
         await this._gate();

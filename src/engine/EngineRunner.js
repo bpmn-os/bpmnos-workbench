@@ -1,11 +1,20 @@
 /**
- * EngineRunner — a thin, promise-based wrapper around the greedy engine Web Worker (engine-worker.js).
- * One request is in flight at a time (the UI flow is sequential: load a model, then run).
+ * EngineRunner — a thin, promise-based wrapper around the engine Web Worker (engine-worker.js). One request
+ * is in flight at a time (the flow is sequential: load a model, then run, then step).
  *
  *   loadModel(xml)         → Promise<string[]>  the lookup-table names the model references
  *   setLookup(name,csv)                         supply one lookup table
  *   run(instanceCsv, seed) → Promise<{ log, seed, time, objective, count }>  one greedy run's token stream
  *                                               (the caller owns the seed, so a re-run can be reproducible)
+ *
+ * A manual run is the same engine driven step by step. It answers with what the engine produced since the
+ * last step, so the caller learns of a stall by the engine being alive with nothing more to fetch:
+ *
+ *   start(instanceCsv, seed) → Promise<Step>    begin a run and let it advance as far as it can
+ *   enqueue(event, payload)  → Promise<Step>    queue what the user decided, then let it advance again
+ *   stop()                   → Promise<void>    end the run and free the engine
+ *
+ * where Step is `{ entries, alive, time, objective }`.
  */
 export default class EngineRunner {
   constructor() {
@@ -25,6 +34,23 @@ export default class EngineRunner {
 
   run(instances, seed) {
     return this._request('run', { type: 'run', instances, seed });
+  }
+
+  start(instances, seed) {
+    return this._request('step', { type: 'start', instances, seed });
+  }
+
+  /**
+   * Queue one thing the user decided and let the engine carry on. The event names what the controller is
+   * asked to queue — `clockTick`, `termination`, `entry`, `exit`, `choice` or `messageDelivery` — so a
+   * decision this application does not yet make needs no change here.
+   */
+  enqueue(event, payload) {
+    return this._request('step', { type: 'enqueue', event, payload });
+  }
+
+  stop() {
+    return this._request('stopped', { type: 'stop' });
   }
 
   destroy() {
@@ -56,6 +82,14 @@ export default class EngineRunner {
     }
     if (msg.type === 'done' && this._pending && this._pending.kind === 'run') {
       const p = this._pending; this._pending = null; p.resolve(msg);
+      return;
+    }
+    if (msg.type === 'step' && this._pending && this._pending.kind === 'step') {
+      const p = this._pending; this._pending = null; p.resolve(msg);
+      return;
+    }
+    if (msg.type === 'stopped' && this._pending && this._pending.kind === 'stopped') {
+      const p = this._pending; this._pending = null; p.resolve();
       return;
     }
   }

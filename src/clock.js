@@ -18,8 +18,13 @@ if (typeof FontFace !== 'undefined' && document.fonts) {
 /**
  * On-canvas simulation clock (top-right, fixed). Shows the current simulated time — the latest
  * clock-tick time streamed by the engine playback — as a right-aligned digital readout followed by the
- * BPMN timer-event clock face. Visible only outside `model` mode (i.e. during greedy / playback); the
- * time comes from the `playback` service's `playback.time` events.
+ * BPMN timer-event clock face. Visible only outside `model` mode (i.e. during a simulation or a
+ * playback); the time comes from the `playback` service's `playback.time` events.
+ *
+ * While the user advances time, which is the manual source, the clock is also the control that advances
+ * it: it takes the pointer, answers on hover, and a click fires `clock.tick`. It says nothing about what
+ * a tick does — whatever drives the engine listens for that event — and it wears the pulse a token wears
+ * when it waits for the user, which is set through `setWaiting` by whatever knows the engine has stalled.
  */
 
 // The bpmn-js timer-event marker, reproduced exactly (bpmn:TimerEventDefinition): an r=11 circle, the two
@@ -51,6 +56,7 @@ export default function createClock(modeler) {
   const canvas = modeler.get('canvas');
   const mode = modeler.get('mode', false);
   const playback = modeler.get('playback', false);
+  const eventBus = modeler.get('eventBus');
 
   const el = domify('<div class="wb-clock"><span class="wb-clock-time"></span>' + timerIcon() + '</div>');
   canvas.getContainer().appendChild(el);
@@ -92,6 +98,27 @@ export default function createClock(modeler) {
   }
   window.addEventListener('resize', alignVCenter);
 
+  // the clock is a control only where a tick means something, which is the source the user drives
+  function setInteractive(on) {
+    el.classList.toggle('wb-clock-interactive', !!on);
+    if (!on) {
+      setWaiting(false);
+    }
+  }
+
+  // the engine is waiting for a tick
+  function setWaiting(on) {
+    el.classList.toggle('wb-clock-waiting', !!on);
+  }
+
+  el.addEventListener('click', () => {
+    if (el.classList.contains('wb-clock-interactive')) {
+      eventBus.fire('clock.tick', {});
+    }
+  });
+
+  eventBus.on('source.changed', event => setInteractive(event.source === 'manual'));
+
   modeler.on('playback.time', event => setTime(event.time));
   // a new run resets the clock (play() clears the time) — reflect the current time on any transport change
   modeler.on('playback.changed', () => setTime(playback && playback.getTime ? playback.getTime() : null));
@@ -99,5 +126,5 @@ export default function createClock(modeler) {
   modeler.on('tokenPanel.refresh', () => setTime(null));
   modeler.on('mode.changed', sync);
 
-  return el;
+  return { element: el, setWaiting };
 }

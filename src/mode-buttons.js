@@ -7,11 +7,12 @@ import {
 import './mode-buttons.css';
 
 /**
- * On-canvas mode buttons (top-left, above the palette) — same look as bpmn-workbench. Two sources share
+ * On-canvas mode buttons (top-left, above the palette) — same look as bpmn-workbench. Three sources share
  * bpmn-js-animation's **playback** animation mode (editing off, token rendering, the Tokens-tab
- * transport): **greedy** (microchip) runs the wasm engine live and shows the Input tab; **playback**
- * (play) replays a loaded log. Greyed = **Model** (editing). The bar tracks which source is active.
- * Manual simulation (a cursor) is a later work package. `greedy` is the controller from createGreedy.
+ * transport): **manual** (a hand) runs the engine with the user advancing time and taking the decisions;
+ * **greedy** (microchip) runs the wasm engine to the end and replays it; **playback** (play) replays a
+ * loaded log. Greyed = **Model** (editing). The bar tracks which source is active. `greedy` is the
+ * controller from createGreedy.
  */
 
 // FontAwesome 6 free icon paths, inlined (no icon font / CDN). The ring is `circle` (regular); the inner
@@ -19,6 +20,10 @@ import './mode-buttons.css';
 // glyph's native viewBox width (all FA icons are 512 tall); `dx` optically re-centres it.
 const RING = 'M464 256a208 208 0 1 0 -416 0 208 208 0 1 0 416 0zM0 256a256 256 0 1 1 512 0 256 256 0 1 1 -512 0z';
 const GLYPHS = {
+  manual: { // hand-pointer (solid) — the same glyph bpmn-workbench uses for its manual simulation
+    d: 'M448 240v96c0 3.084-.356 6.159-1.063 9.162l-32 136C410.686 499.23 394.562 512 376 512H168a40.004 40.004 0 0 1-32.35-16.473l-127.997-176c-12.993-17.866-9.043-42.883 8.822-55.876 17.867-12.994 42.884-9.043 55.877 8.823L104 315.992V40c0-22.091 17.908-40 40-40s40 17.909 40 40v200h8v-40c0-22.091 17.908-40 40-40s40 17.909 40 40v40h8v-24c0-22.091 17.908-40 40-40s40 17.909 40 40v24h8c0-22.091 17.908-40 40-40s40 17.909 40 40z',
+    w: 448
+  },
   greedy: { // microchip (solid)
     d: 'M176 24c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 40c-35.3 0-64 28.7-64 64l-40 0c-13.3 0-24 10.7-24 24s10.7 24 24 24l40 0 0 56-40 0c-13.3 0-24 10.7-24 24s10.7 24 24 24l40 0 0 56-40 0c-13.3 0-24 10.7-24 24s10.7 24 24 24l40 0c0 35.3 28.7 64 64 64l0 40c0 13.3 10.7 24 24 24s24-10.7 24-24l0-40 56 0 0 40c0 13.3 10.7 24 24 24s24-10.7 24-24l0-40 56 0 0 40c0 13.3 10.7 24 24 24s24-10.7 24-24l0-40c35.3 0 64-28.7 64-64l40 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-40 0 0-56 40 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-40 0 0-56 40 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-40 0c0-35.3-28.7-64-64-64l0-40c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 40-56 0 0-40c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 40-56 0 0-40zM160 128l192 0c17.7 0 32 14.3 32 32l0 192c0 17.7-14.3 32-32 32l-192 0c-17.7 0-32-14.3-32-32l0-192c0-17.7 14.3-32 32-32zm16 48l0 160 160 0 0-160-160 0z',
     w: 512
@@ -44,8 +49,9 @@ export function modeIcon(glyph, source) {
     + '</svg>';
 }
 
-export default function createModeButtons(modeler, greedy) {
+export default function createModeButtons(modeler, greedy, manual) {
   const mode = modeler.get('mode');
+  const eventBus = modeler.get('eventBus');
   const canvas = modeler.get('canvas');
   const sidePanel = modeler.get('sidePanel', false);
   const animation = modeler.get('animation', false);
@@ -54,6 +60,7 @@ export default function createModeButtons(modeler, greedy) {
 
   const el = domify(`
     <div class="wb-mode-buttons">
+      <button type="button" data-source="manual" title="Manual simulation">${modeIcon('manual')}</button>
       <button type="button" data-source="greedy" title="Greedy simulation">${modeIcon('greedy')}</button>
       <button type="button" data-source="playback" title="Playback">${modeIcon('playback')}</button>
     </div>
@@ -61,7 +68,7 @@ export default function createModeButtons(modeler, greedy) {
   container.appendChild(el);
 
   const buttons = Array.from(el.querySelectorAll('button'));
-  let source = null; // 'greedy' | 'playback' | null (= model / editing)
+  let source = null; // 'manual' | 'greedy' | 'playback' | null (= model / editing)
 
   function render() {
     buttons.forEach(b => domClasses(b).toggle('active', b.getAttribute('data-source') === source));
@@ -76,21 +83,31 @@ export default function createModeButtons(modeler, greedy) {
       animation.clear();
     }
     source = next;
-    if (source === 'greedy') {
+    if (source === 'manual') {
+      greedy && greedy.deactivate();
+      mode.setMode('playback'); // editing off + token rendering; the run is driven by the user
+      manual && manual.activate();
+    } else if (source === 'greedy') {
+      manual && manual.deactivate();
       mode.setMode('playback'); // editing off + token rendering; greedy adds its Input tab
       greedy && greedy.activate();
     } else if (source === 'playback') {
+      manual && manual.deactivate();
       greedy && greedy.deactivate();
       mode.setMode('playback');
     } else {
+      manual && manual.deactivate();
       greedy && greedy.deactivate();
       mode.setMode('model');
     }
     // greedy produces the engine log → offer "Save log"; playback replays a file → "Load log". Both run
     // in the anim 'play' mode, so the panel can't tell them apart on its own — bpmnos owns this choice.
     if (tokenPanel && tokenPanel.setLogButton) {
-      tokenPanel.setLogButton(source === 'greedy' ? 'save' : 'load');
+      tokenPanel.setLogButton(source === 'playback' ? 'load' : 'save');
     }
+    // The mode service knows `model` and `playback`, and all three sources are the latter to it, so what
+    // tells them apart is announced here: whatever needs to know which source is running listens for this.
+    eventBus.fire('source.changed', { source });
     render();
   }
 
@@ -116,6 +133,7 @@ export default function createModeButtons(modeler, greedy) {
     // an external switch back to Model (e.g. via another control) clears the active source
     if (event.mode === 'model' && source) {
       source = null;
+      manual && manual.deactivate();
       greedy && greedy.deactivate();
     }
     render();

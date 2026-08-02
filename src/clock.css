@@ -41,3 +41,20 @@
   height: 1em;
   flex: 0 0 auto;
 }
+
+/* While the user advances time the clock is a control rather than a readout: it takes the pointer, says so
+   on hover in the accent the mode buttons use, and wears the cue a token wears when it waits for the user
+   (`bts-pulse-pause`, from bpmn-js-animation's stylesheet) while the engine is waiting for a tick. */
+
+.wb-clock.wb-clock-interactive {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.wb-clock.wb-clock-interactive:hover {
+  color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
+.wb-clock.wb-clock-waiting .wb-clock-icon {
+  animation: bts-pulse-pause 1.8s infinite ease-in-out;
+}

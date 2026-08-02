@@ -1,4 +1,4 @@
-// The greedy-simulation engine worker.
+// The engine worker, serving both a greedy run and a manual one.
 //
 // `Engine.run` is a single blocking call, so the BPMN-OS wasm engine runs here in a Web Worker rather
 // than on the page. It assembles an Input in three steps so the page can prompt for a model's lookup
@@ -20,6 +20,36 @@ ready.then(() => self.postMessage({ type: 'ready' })).catch(err =>
 let Module = null;
 let modelXml = null;
 let lookupTables = {};
+
+// A manual run keeps its engine alive between the page's inputs: the engine returns from `run` and from
+// `resume` when it can fetch no further event, the caller queues what is to happen next on the controller,
+// and the next `resume` carries on. The entries the monitor collects in between are handed over with each
+// answer, since the engine notifies synchronously while it runs and nothing can be posted meanwhile.
+let session = null; // { engine, monitor, controller, entries }
+
+function endSession() {
+  if (!session) {
+    return;
+  }
+  session.engine.delete();
+  session.monitor.delete();
+  session.controller.delete();
+  session = null;
+}
+
+// What the page is told after every step: the records the engine produced, whether it is still running,
+// and where its clock stands.
+function report() {
+  const entries = session.entries;
+  session.entries = [];
+  self.postMessage({
+    type: 'step',
+    entries,
+    alive: session.engine.isAlive(),
+    time: session.engine.getCurrentTime(),
+    objective: session.engine.getWeightedObjective()
+  });
+}
 
 self.onmessage = async (event) => {
   const message = event.data;
@@ -84,6 +114,71 @@ self.onmessage = async (event) => {
       engine.delete();
       monitor.delete();
       self.postMessage(done);
+      return;
+    }
+
+    if (message.type === 'start') {
+      if (!modelXml) {
+        self.postMessage({ type: 'error', error: 'no model loaded' });
+        return;
+      }
+      endSession(); // a previous manual run is replaced
+
+      const input = new Module.Input(modelXml);
+      for (const [ name, csv ] of Object.entries(lookupTables)) {
+        input.addLookupTable(name, csv);
+      }
+      input.setInstance(message.instances);
+
+      const entries = [];
+      const monitor = new Module.Monitor();
+      monitor.addObserver((entryJson) => entries.push(JSON.parse(entryJson)));
+
+      // a controller is what makes the run interactive: no time handler is attached, so the engine stops
+      // wherever it can fetch no event, and time advances only by what the caller queues
+      const controller = new Module.Controller();
+      const seed = Number.isFinite(message.seed) ? message.seed : Math.floor(Math.random() * 0x7fffffff);
+      const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), monitor, controller);
+      input.delete();
+
+      session = { engine, monitor, controller, entries };
+      engine.run(0);
+      report();
+      return;
+    }
+
+    if (message.type === 'enqueue') {
+      if (!session) {
+        self.postMessage({ type: 'error', error: 'no run to continue' });
+        return;
+      }
+      // One channel for everything the user decides. The kinds a controller offers are named here and
+      // nowhere else, so a decision this application does not yet make needs no protocol of its own.
+      const controller = session.controller;
+      const payload = message.payload ? JSON.stringify(message.payload) : null;
+      const queued = {
+        clockTick: () => controller.enqueueClockTickEvent(),
+        termination: () => controller.enqueueTerminationEvent(),
+        entry: () => controller.enqueueEntryDecision(payload),
+        exit: () => controller.enqueueExitDecision(payload),
+        choice: () => controller.enqueueChoiceDecision(payload),
+        messageDelivery: () => controller.enqueueMessageDeliveryDecision(payload)
+      }[message.event];
+
+      if (!queued) {
+        self.postMessage({ type: 'error', error: 'unknown event: ' + message.event });
+        return;
+      }
+
+      queued();
+      session.engine.resume();
+      report();
+      return;
+    }
+
+    if (message.type === 'stop') {
+      endSession();
+      self.postMessage({ type: 'stopped' });
       return;
     }
   } catch (err) {
