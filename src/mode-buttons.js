@@ -75,15 +75,9 @@ export default function createModeButtons(modeler, greedy, manual) {
     buttons.forEach(b => domClasses(b).toggle('active', b.getAttribute('data-source') === source));
   }
 
-  // A source switch is a fresh session, so it does what the panel's Refresh does: stop what is playing,
-  // clear the tokens, and announce it, whereupon each source gives up its run and the clock blanks its
-  // readout. mode.setMode() clears only when the anim mode actually changes, and all three sources map to
-  // 'playback', so that alone would carry a run's tokens across. The panel keeps its own refresh private,
-  // hence the three steps here rather than a call to it.
-  //
-  // The stop is awaited: a player walks its log asynchronously, so clearing the canvas without waiting
-  // leaves it applying the next record to a diagram whose tokens are gone, which fails as "no token <x>
-  // at <y>". The run ends first, then what it drew is cleared.
+  // A source switch is a fresh session and does what the panel's Refresh does: the run ends, the tokens
+  // are cleared, and the refresh is announced, whereupon each source gives up its run and the clock blanks.
+  // The stop is awaited so that nothing is still being drawn when the canvas is cleared.
   async function refreshSession() {
     if (playback) {
       await playback.stop();

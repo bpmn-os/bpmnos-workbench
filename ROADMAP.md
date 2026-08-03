@@ -39,11 +39,11 @@ panels of R3 and R6, whose rows are token entries drawn by the same view.
 
 ## Status (2026-07-21)
 
-**Playback, greedy simulation and the manual clock are built and working.** The app scaffold, the
-engine-token → animation mapping, the live wasm greedy run, and a manual run the user carries forward by
-clicking the canvas clock are done. What remains of interactive simulation is the deciding: a message
-delivery, a choice and a sequential entry are settled by the composition today, and each becomes the user's
-as its panel arrives. The **observation panels** (Tokens/Messages richer views) remain, as does moving the
+**Playback, greedy simulation, the manual clock and message delivery are built and working.** The app
+scaffold, the engine-token → animation mapping, the live wasm greedy run, a manual run the user carries
+forward by clicking the canvas clock, and the delivery of a message to a token the user picks are done. What
+remains of interactive simulation is the rest of the deciding: a choice and a sequential entry are settled by
+the composition today, and each becomes the user's as its panel arrives. The **observation panels** (Tokens/Messages richer views) remain, as does moving the
 run's controls out of the Tokens tab into a footer of the side panel, which is where a manual run's start,
 refresh and decisions belong.
 
@@ -321,12 +321,12 @@ bullet in the sending token's colour, the message name and the sender collapsed,
 the contents expanded. The header reads as text rather than as string-pool numbers, the engine having gained
 a type per header key (sprint 02).
 
-The tokens that may receive a message, and the filter over them, are **not** part of this and belong to
-interactive simulation. Which tokens may receive a message can only be answered by an engine standing at the
-step being shown, and a greedy run has finished replaying by then while playback holds no engine at all;
-reproducing the engine's matching in JavaScript, recording it in the log, or keeping it beside the run were
-each weighed and rejected in sprint 03. The filter is therefore not drawn, and `addFilter` in
-`src/messages/Panel.js` builds it for the day it can mean something.
+The tokens that may receive a message came with interactive simulation, which is the engine standing at the
+step being shown: the manual run reports its pending decisions and their candidates at every step, and the
+`messages` service reads them the other way round, as the tokens that may receive each message. A message
+therefore ends in those tokens, each drawn as the Tokens tab draws a token and each offering to deliver the
+message there, and the heading's filter selects on the same relation — "selected tokens" narrows both the
+messages listed and the tokens shown under them.
 
 ### R3 · Messages side panel — the requirement as stated
 

@@ -189,7 +189,6 @@ EngineLogPlayer.prototype._setState = function(state) {
   this._eventBus.fire('playback.changed', { state });
 };
 
-// `null` is a time too: it says the player holds no run, and the readout follows it like any other value.
 EngineLogPlayer.prototype._setTime = function(time) {
   if (time === undefined || time === this._time) {
     return;
@@ -247,8 +246,7 @@ EngineLogPlayer.prototype.play = async function(log) {
           if (!this._streaming) {
             return;
           }
-          // Nothing left to play and more still to come: the diagram now shows everything that has
-          // happened, which is what a caller waits for before asking the user to decide what happens next.
+          // the diagram now shows everything that has happened
           this._eventBus.fire('playback.drained', {});
           await new Promise(resolve => { this._arrival = resolve; });
           await this._gate();
@@ -310,17 +308,13 @@ EngineLogPlayer.prototype.stop = async function() {
   this._aborted = true;
   this._paused = false;
   this._drainResumers();
-  // A streamed run may be parked waiting for records that will now never come, and only a wake releases
-  // it; without this, stopping such a run waits for it forever and whatever follows the stop never runs.
-  this._wake();
+  this._wake(); // a stream parked on records that will never come is released here
   try {
     await this._run;
   } catch (err) {
     // an abort surfaces as a rejected run on some paths — swallow it
   }
-  // The run is given up rather than finished, so its time is the time of nothing and goes with it. A run
-  // that plays to its end keeps its final time, `stop` not being called for it.
-  this._setTime(null);
+  this._setTime(null); // the run is given up, so its time is the time of nothing
 };
 
 /** One run/pause button: idle→play, playing→pause, paused→resume. */

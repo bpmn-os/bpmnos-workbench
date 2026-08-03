@@ -78,8 +78,7 @@ function decisions() {
 // What the page is told after every step: the records the engine produced, what it is waiting for, whether
 // it is still running, and where its clock stands.
 function report() {
-  // emptied in place: the monitor's observer holds this very array, so a fresh one would collect nothing
-  const entries = session.entries.splice(0);
+  const entries = session.entries.splice(0); // in place: the monitor's observer holds this array
   self.postMessage({
     type: 'step',
     entries,

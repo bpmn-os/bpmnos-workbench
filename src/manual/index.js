@@ -209,7 +209,7 @@ export default function createManual(modeler, clock) {
 
   // the clock is the control that advances time, and it says only that it was clicked
   eventBus.on('clock.tick', () => {
-    decide('clockTick'); // not returned: an answered event stops there, and a promise is an answer
+    decide('clockTick');
   });
 
   // Refresh gives up the run rather than merely clearing what is drawn: a manual run cannot be resumed from
@@ -222,9 +222,7 @@ export default function createManual(modeler, clock) {
     }
   });
 
-  // A new model was imported: the input is derived from it afresh, which withdraws the run source until
-  // there is something to run again. The braces are not decoration — diagram-js stops an event a listener
-  // answers, so returning anything here would keep every later listener from hearing the import.
+  // a new model was imported: the input is derived from it afresh, which withdraws the run source
   eventBus.on('import.done', () => {
     if (input) {
       input.load();

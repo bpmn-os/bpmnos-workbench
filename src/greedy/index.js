@@ -95,9 +95,6 @@ export default function createGreedy(modeler) {
   });
 
   // a new model was imported (toolbar "Open") — if greedy is active, re-derive its inputs from it
-  // braces matter: diagram-js stops an event a listener answers, and returning `input && input.load()`
-  // answers with null whenever greedy is inactive, which would keep every later listener — the manual
-  // source among them — from hearing that a model was imported
   eventBus.on('import.done', () => {
     if (input) {
       input.load();

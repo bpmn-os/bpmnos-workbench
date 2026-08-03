@@ -74,8 +74,22 @@ Key source (this repo):
   sending node and the sending instance, node-testable), `index.js` (the `messages` service, announcing
   `messages.changed`, clearing with the tokens), `Panel.js` (the "Messages" tab, built from the Tokens tab's
   own classes so the two lists are one appearance), `MessageEntry.js` (a row: BPMN's own message envelope
-  with a bullet in the sending token's colour, over the `wb-attribute` lines a token's attributes use). The
-  player is the only writer, applying each record as it replays it and reading the sender's colour then.
+  with a bullet in the sending token's colour, over the `wb-attribute` lines a token's attributes use),
+  `messages.css` (only what the offer to deliver needs, the rest being the Tokens tab's). The player is the
+  only writer, applying each record as it replays it and reading the sender's colour then.
+
+  A message a run can still deliver ends in the tokens that may receive it, under "Tokens", each with the
+  offer to deliver it there: a paper plane until the delivery is asked for, an hourglass until the record
+  reporting it arrives and takes the message from the list. Which tokens those are is the engine's answer,
+  read from `manual.decisions` and held beside the store as a relation rather than in it; the heading's
+  filter selects on that same relation, so "selected tokens" narrows both which messages are listed and
+  which of a message's tokens are shown under it.
+- `src/token-rows/` — the `tokenRows` service: a token drawn as the Tokens tab draws it, wherever a panel
+  asks something of the reader about it. The row is `createTokenEntry` given what the token panel gives its
+  own rows, so a token reads the same everywhere; a panel adds a control the row carries and, later, a
+  contribution to what the row discloses. The service follows the animation's token events and updates every
+  row it handed out, and holds a row under the key its caller gives it — one token is a candidate for many
+  messages, and one element cannot stand in two lists.
   A listener that clears must not *return* the clearance: diagram-js stops an event a listener answers, and
   returning from `diagram.clear` kept the canvas from hearing it, which surfaced as `rootDi is undefined`
   from `saveXML`.

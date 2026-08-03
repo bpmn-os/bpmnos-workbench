@@ -38,6 +38,7 @@ import EnginePlaybackModule from './playback/index.js';
 // → `executionState`: the values a run produces, and the body of a token entry that shows them
 import ExecutionStateModule, { createTokenDetailRenderer } from './execution-state/index.js';
 import MessagesModule from './messages/index.js';        // → the "Messages" tab
+import TokenRowsModule from './token-rows/index.js';     // token rows a decision panel mounts
 import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
 import createManual from './manual/index.js';           // manual simulation: the user advances the run
 import createModeButtons, { modeIcon } from './mode-buttons.js';
@@ -134,6 +135,7 @@ const modeler = new BpmnModeler({
     ModeModule,           // → mode.setMode('model'|'playback')
     ExecutionStateModule, // → `executionState`: status, data and globals per token, written by the player
     MessagesModule,       // → the "Messages" tab
+    TokenRowsModule,      // token rows, drawn as the Tokens tab draws them, for panels that decide
     EnginePlaybackModule  // → overrides `playback` with the native engine-log player (list last)
   ],
   moddleExtensions
