@@ -4,14 +4,31 @@
 // than on the page. It assembles an Input in three steps so the page can prompt for a model's lookup
 // tables before running: parse a model and report the lookup tables it references (`loadModel` →
 // `lookups`), accept each lookup table's CSV (`lookup`), and — once the instance CSV is supplied — build
-// an Engine with NO controller (the autonomous greedy run: greedy controller + guided evaluator +
-// TimeWarp clock) and run it (`run` → `done`). No controller is attached, so the engine advances its own
-// clock (clock ticks included) and runs to completion. The seed comes from the caller (the page owns it,
-// so a re-run can be reproducible and "Refresh" can re-roll it); a given seed → a fixed stochastic sample.
-// The whole run's monitor entries arrive in one synchronous burst inside `run`, so we collect them here
-// and hand the page the complete log in the `done` message.
+// an Engine and run it (`run` → `done`). The seed comes from the caller (the page owns it, so a re-run can
+// be reproducible and "Refresh" can re-roll it); a given seed → a fixed stochastic sample. The whole run's
+// monitor entries arrive in one synchronous burst inside `run`, so we collect them here and hand the page
+// the complete log in the `done` message.
+//
+// What a run decides for itself is the controller's composition rather than a mode of the engine, so a
+// greedy run is composed of every deciding dispatcher and a clock, and a run the user drives leaves out
+// what it is to be asked about.
 
 import createBPMNOS from '@bpmn-os/bpmnos-wasm';
+
+// Every decision settles itself and the clock advances on its own, so a run needs nothing from the page.
+// `EnqueuedEvents` precedes `TimeWarp` because a clock answers every fetch: behind it, nothing the page
+// enqueues — a termination, say — would ever be dispatched.
+const GREEDY = [
+  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage',
+  'FirstEnumeratedChoice', 'CompetingCandidates', 'EnqueuedEvents', 'TimeWarp'
+];
+
+// What is unambiguous still settles itself; the choice, the entry of a child of a sequential ad hoc
+// subprocess and the ambiguous message delivery are left for the page to decide, and there is no clock, so
+// time advances only by a tick the page enqueues.
+const INTERACTIVE = [
+  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'EnqueuedEvents'
+];
 
 const ready = createBPMNOS();
 ready.then(() => self.postMessage({ type: 'ready' })).catch(err =>
@@ -95,11 +112,12 @@ self.onmessage = async (event) => {
 
       // the caller owns the seed (Refresh re-rolls it); fall back to a random one if none was supplied
       const seed = Number.isFinite(message.seed) ? message.seed : Math.floor(Math.random() * 0x7fffffff);
-      const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), monitor, null);
+      const controller = new Module.Controller(JSON.stringify({ dispatchers: GREEDY }));
+      const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), controller, monitor);
       input.delete();
 
       const startedAt = performance.now();
-      engine.run(0); // controller === null → autonomous greedy run to completion (TimeWarp drives the clock)
+      engine.run(0); // the greedy composition decides everything itself and TimeWarp advances its clock
       const engineMs = performance.now() - startedAt;
 
       const done = {
@@ -112,6 +130,7 @@ self.onmessage = async (event) => {
         engineMs
       };
       engine.delete();
+      controller.delete();
       monitor.delete();
       self.postMessage(done);
       return;
@@ -134,11 +153,11 @@ self.onmessage = async (event) => {
       const monitor = new Module.Monitor();
       monitor.addObserver((entryJson) => entries.push(JSON.parse(entryJson)));
 
-      // a controller is what makes the run interactive: no time handler is attached, so the engine stops
-      // wherever it can fetch no event, and time advances only by what the caller queues
-      const controller = new Module.Controller();
+      // the composition is what makes the run interactive: no clock is among its dispatchers, so the engine
+      // stops wherever it can fetch no event, and time advances only by what the page queues
+      const controller = new Module.Controller(JSON.stringify({ dispatchers: INTERACTIVE }));
       const seed = Number.isFinite(message.seed) ? message.seed : Math.floor(Math.random() * 0x7fffffff);
-      const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), monitor, controller);
+      const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), controller, monitor);
       input.delete();
 
       session = { engine, monitor, controller, entries };
