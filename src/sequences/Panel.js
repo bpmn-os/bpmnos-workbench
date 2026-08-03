@@ -208,6 +208,10 @@ SequencesPanel.prototype._list = function(performer) {
     const row = this._row(performer, key);
 
     if (row) {
+      // the anchor is greyed to say what its missing arrows say: it takes no part in the order. It is a
+      // token like any other and selects like one; a row cached from an earlier draw gives the mark back
+      // when its token returns to the order.
+      row.classList.toggle('wb-performer-fixed', key === performer.fixed);
       list.add(key, row, undefined, { fixed: key === performer.fixed });
     }
   });

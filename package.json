@@ -32,7 +32,7 @@
     "@bpmn-io/properties-panel": "^3.46.0",
     "@bpmn-os/bpmnos-wasm": "github:bpmn-os/bpmnos-wasm#dist",
     "bpmn-js": "^18.19.0",
-    "bpmn-js-animation": "github:bpmn-os/bpmn-js-animation#affd7e2a7d44001795dbed7c80e802ed692b4f7c",
+    "bpmn-js-animation": "github:bpmn-os/bpmn-js-animation#b5dbefad9b18575430ce1f8ce00b4b83be55ffd7",
     "bpmn-js-bpmnlint": "^0.24.0",
     "bpmn-js-properties-panel": "^5.60.0",
     "bpmn-js-side-panel": "github:bpmn-os/bpmn-js-side-panel#c978e34a54c7d8f582ce4172aa87553000053e10",

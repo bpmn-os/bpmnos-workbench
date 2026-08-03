@@ -173,15 +173,25 @@
     // announces the ordinary click-selection, which the application answers by selecting the token
     const animation = { reveal: () => Promise.resolve() };
 
-    eventBus.on('token.click', ({ label, node }) => {
+    eventBus.on('token.click', ({ label, node, originalEvent }) => {
       const token = TOKENS.find((one) => one.label === label && one.node === node);
 
       if (!token) {
         return;
       }
 
-      // as the animation answers a plain click: the rest is cleared and this one is selected, unless it
-      // was the sole selection, which a second click on it clears
+      // as the animation answers a click: with shift held the token is added to the selection or taken out
+      // of it, and without it the rest is cleared and this one selected, unless it was the sole selection,
+      // which a second click on it clears
+      if (originalEvent && originalEvent.shiftKey) {
+        token.selected = !token.selected;
+        selected = TOKENS.filter((one) => one.selected);
+        boxes.forEach((box, one) => { box.checked = !!one.selected; });
+        eventBus.fire('token.selection.changed', {});
+
+        return;
+      }
+
       const sole = TOKENS.filter((one) => one.selected);
 
       TOKENS.forEach((one) => { one.selected = one === token && !(sole.length === 1 && token.selected); });

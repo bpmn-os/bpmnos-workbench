@@ -61,7 +61,7 @@ TokenRows.prototype.create = function(key, identity, options = {}) {
     controls: options.control,
     displayNode: (id) => this._displayNode(id),
     renderDetail: this._detail(options.detail),
-    onClick: (token) => this._select(token)
+    onClick: (token, event) => this._select(token, event)
   });
 
   const row = {
@@ -78,7 +78,8 @@ TokenRows.prototype.create = function(key, identity, options = {}) {
 /**
  * Selecting the token a row shows, which is what a click on it does, exactly as a click in the Tokens tab
  * does: the token's stacks are brought to the front and the ordinary click-selection is announced, so a
- * token selected here is selected on the canvas and in every other list showing it.
+ * token selected here is selected on the canvas and in every other list showing it. The reader's own event
+ * goes with it, so shift adds a token to the selection, or takes it out again, as it does on the canvas.
  *
  * A token the animation has not drawn is a stand-in with no stack to reveal and nothing to select, so its
  * row stays inert rather than announcing a click for a token that is not there.
@@ -86,7 +87,7 @@ TokenRows.prototype.create = function(key, identity, options = {}) {
  * A double click is not offered. In the Tokens tab it advances the token, and in this application the
  * engine advances tokens; a decision panel that advanced one would be a second way to drive the run.
  */
-TokenRows.prototype._select = function(token) {
+TokenRows.prototype._select = function(token, originalEvent) {
   const animation = this._injector.get('animation', false);
 
   if (!token.state) {
@@ -98,7 +99,8 @@ TokenRows.prototype._select = function(token) {
       node: token.node,
       label: token.label,
       sequenceFlow: token.state.sequenceFlow || null,
-      stackIndices: token.stackIndices || {}
+      stackIndices: token.stackIndices || {},
+      originalEvent: originalEvent || {}
     });
   });
 };

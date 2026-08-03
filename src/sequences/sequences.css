@@ -18,6 +18,16 @@
   margin-right: -4px;
 }
 
+/* The anchor of a performer's list is the token it is conducting, or the token it has been given and not
+   yet answered for. It carries no arrows, and it is greyed so that what it shows says the same: this row is
+   not the reader's to move. The whole of it is greyed, what it discloses as well as its summary, the row
+   being one token. Its selection tint and its hover are untouched, since it is still a token like the
+   others and selects like one. */
+.wb-performer-fixed .bjs-token-summary,
+.wb-performer-fixed > .bjs-collapsible-entry-entries {
+  opacity: 0.55;
+}
+
 /* The divider reads as a statement rather than as an entry: the muted type of a list title, so that it
    separates the rows without competing with them. It is given the height of the reorder strip, which is the
    height every other row of the list has, so that its words sit on the midpoint between the arrows beside
