@@ -75,7 +75,7 @@ MessagesPanel.prototype._offer = function(message, recipient) {
   const draw = () => {
     const awaited = this._awaited.has(asked(message.key, recipient));
 
-    button.title = awaited ? 'Delivery enqueued' : 'Deliver this message here';
+    button.title = awaited ? 'Delivery pending' : 'Deliver message';
     button.innerHTML = awaited ? HOURGLASS : PAPER_PLANE;
     button.disabled = awaited;
   };
