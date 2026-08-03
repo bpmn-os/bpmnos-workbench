@@ -1,3 +1,4 @@
+import addFilter from '../panel-filter.js';
 import createMessageEntry from './MessageEntry.js';
 
 // Font Awesome 6 free, solid: paper-plane offers the delivery, hourglass says it is with the engine.
@@ -35,7 +36,7 @@ export default function MessagesPanel(injector, eventBus, messages, config) {
 
   // the filter selects by what the reader has selected, so the list follows a change of selection
   eventBus.on('token.selection.changed', () => {
-    if (this._filter === 'recipients') {
+    if (this._filter === 'selected') {
       this._render();
     }
   });
@@ -97,7 +98,7 @@ MessagesPanel.prototype._offer = function(message, recipient) {
  * listed, and which of a message's tokens are shown under it.
  */
 MessagesPanel.prototype._shown = function(recipients) {
-  if (this._filter !== 'recipients') {
+  if (this._filter !== 'selected') {
     return recipients;
   }
 
@@ -189,11 +190,14 @@ MessagesPanel.prototype._build = function() {
   title.textContent = 'Messages';
   heading.appendChild(title);
 
-  // The filter selects by the same relation the rows offer: a message is "for the selected recipients" when
-  // one of the tokens that may receive it is a token the reader has selected.
-  addFilter(heading, (value) => {
-    this._filter = value;
-    this._render();
+  // The filter selects by the same relation the rows offer: a message is shown when one of the tokens that
+  // may receive it is a token the reader has selected.
+  addFilter(heading, {
+    name: 'wb-message-filter',
+    onChange: (value) => {
+      this._filter = value;
+      this._render();
+    }
   });
 
   this._inspector = document.createElement('div');
@@ -220,15 +224,16 @@ MessagesPanel.prototype._render = function() {
 
   this._inspector.innerHTML = '';
 
-  const messages = this._filter === 'recipients'
-    ? this._messages.all().filter((message) => this._forSelected(message))
-    : this._messages.all();
+  const held = this._messages.all(),
+        messages = this._filter === 'selected'
+          ? held.filter((message) => this._forSelected(message))
+          : held;
 
   if (!messages.length) {
     const hint = document.createElement('div');
 
     hint.className = 'bjs-token-empty';
-    hint.textContent = 'No messages.';
+    hint.textContent = held.length ? 'No matching messages.' : 'No messages.';
 
     this._inspector.appendChild(hint);
 
@@ -247,30 +252,6 @@ MessagesPanel.prototype._render = function() {
     this._inspector.appendChild(entry.element);
   });
 };
-
-/**
- * Adds the filter to a heading: which messages are listed, all of them or those the selected tokens may
- * receive.
- *
- * @param {Element} heading  the heading built by {@link MessagesPanel#_build}
- * @param {Function} onChange  (value) => void, called with 'all' or 'recipients'
- */
-export function addFilter(heading, onChange) {
-  [ [ 'all', 'all' ], [ 'recipients', 'selected tokens' ] ].forEach(([ value, label ], index) => {
-    const option = document.createElement('label'),
-          radio = document.createElement('input');
-
-    radio.type = 'radio';
-    radio.name = 'wb-message-filter';
-    radio.value = value;
-    radio.checked = index === 0;
-    radio.addEventListener('change', () => radio.checked && onChange(value));
-
-    option.appendChild(radio);
-    option.appendChild(document.createTextNode(' ' + label));
-    heading.appendChild(option);
-  });
-}
 
 /**
  * The note shown in place of the tab's content while the workbench is modelling. The mode service is
