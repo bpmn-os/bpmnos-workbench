@@ -1,5 +1,5 @@
 /**
- * EngineRunner — a thin, promise-based wrapper around the greedy engine Web Worker (engine-worker.js).
+ * EngineRunner — a thin, promise-based wrapper around the engine Web Worker (engine-worker.js).
  * One request is in flight at a time (the UI flow is sequential: load a model, then run).
  *
  *   loadModel(xml)         → Promise<string[]>  the lookup-table names the model references
