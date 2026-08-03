@@ -32,6 +32,9 @@ export default function createManual(modeler, clock) {
   let running = false;      // a run has begun and has not been ended
   let stalled = false;      // the engine is alive and can fetch no event: it waits for the user
   let drained = false;      // the diagram shows everything the engine has produced so far
+  let pending = [];         // what the engine is waiting for, as the controller last reported it
+  let decided = [];         // what the user has decided and the engine has not yet been given
+  let deciding = false;     // a decision is with the engine; the rest of `decided` follows it
 
   function activate() {
     if (!tokenPanel || input) {
@@ -97,6 +100,8 @@ export default function createManual(modeler, clock) {
     running = false;
     stalled = false;
     clock.setWaiting(false);
+    decided = [];
+    announce([]);
     playback.endStream();
     await release();
   }
@@ -110,6 +115,8 @@ export default function createManual(modeler, clock) {
     running = false;
     stalled = false;
     clock.setWaiting(false);
+    decided = [];
+    announce([]);
     playback.endStream();
     await playback.stop();
     await release();
@@ -134,6 +141,11 @@ export default function createManual(modeler, clock) {
     drained = false;
     playback.push(step.entries);
 
+    // What the engine is waiting for is announced as it changes, so whichever panel offers a decision reads
+    // it from one place. It is the engine's own answer, not a reading of the diagram, which is why it can be
+    // offered while the animation is still catching up.
+    announce(step.decisions || []);
+
     if (step.alive) {
       stalled = true;
     } else {
@@ -141,23 +153,45 @@ export default function createManual(modeler, clock) {
     }
   }
 
+  function announce(decisions) {
+    pending = decisions;
+    eventBus.fire('manual.decisions', { decisions });
+  }
+
   function sayWaiting() {
     clock.setWaiting(running && stalled && drained);
   }
 
-  // Everything the user decides reaches the engine here, named rather than typed: a clock tick today, a
-  // message delivery, a choice or an entry when those are built, each one queued and the engine let go.
-  async function decide(event, payload) {
-    if (!running || !stalled) {
+  // Everything the user decides reaches the engine here, named rather than typed: a clock tick, a message
+  // delivery, and a choice or a sequential entry when those are built, each one queued and the engine let
+  // go. A decision may be made at any moment, including while the engine is still answering the previous
+  // one, so what the user decides is held here and sent in turn rather than refused. Nothing guarantees
+  // that a decision is still valid when it is reached: the engine drops what has expired, and any later
+  // decision that is still valid is taken.
+  function decide(event, payload) {
+    if (!running) {
       return;
     }
-    stalled = false;
-    clock.setWaiting(false);
+    decided.push({ event, payload });
+    if (!deciding) {
+      send();
+    }
+  }
+
+  async function send() {
+    deciding = true;
     try {
-      apply(await runner.enqueue(event, payload));
+      while (running && decided.length) {
+        const { event, payload } = decided.shift();
+        stalled = false;
+        clock.setWaiting(false);
+        apply(await runner.enqueue(event, payload));
+      }
     } catch (err) {
       console.error('[manual] step failed:', err);
       await abandon();
+    } finally {
+      deciding = false;
     }
   }
 
@@ -165,6 +199,12 @@ export default function createManual(modeler, clock) {
   eventBus.on('playback.drained', () => {
     drained = true;
     sayWaiting();
+  });
+
+  // whatever panel offers a decision announces it here rather than reaching for the engine, so a panel
+  // knows what was decided and nothing else
+  eventBus.on('manual.decide', ({ event, payload }) => {
+    decide(event, payload);
   });
 
   // the clock is the control that advances time, and it says only that it was clicked

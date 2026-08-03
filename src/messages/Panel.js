@@ -20,11 +20,68 @@ export default function MessagesPanel(injector, eventBus, messages, config) {
 
   this._body = null;
   this._inspector = null;
-  this._open = new Map(); // which rows a reader has expanded, kept as the list is drawn again
+  this._open = new Map();   // which rows a reader has expanded, kept as the list is drawn again
+  this._awaited = new Set(); // deliveries asked for and not yet reported, so the offer reads as waiting
+  this._filter = 'all';      // which messages are listed: all of them, or those for the selected tokens
 
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('messages.changed', () => this._render());
   eventBus.on('mode.changed', () => this._applyNote());
+
+  // the filter selects by what the reader has selected, so the list follows a change of selection
+  eventBus.on('token.selection.changed', () => {
+    if (this._filter === 'recipients') {
+      this._render();
+    }
+  });
+
+  // A run that ends takes its offers with it: what was asked for of an engine that is gone is not awaited.
+  eventBus.on([ 'tokens.cleared', 'diagram.clear' ], () => {
+    this._awaited.clear();
+  });
+}
+
+/**
+ * Whether one of the tokens that may receive this message is a token the reader has selected. A selected
+ * token is named by the animation as the label it carries and the node it stands at, which is the instance
+ * and the node a recipient is named by.
+ */
+MessagesPanel.prototype._forSelected = function(message) {
+  const primitives = this._injector.get('primitives', false),
+        recipients = this._messages.recipients ? this._messages.recipients(message.key) : [];
+
+  if (!primitives || !recipients.length) {
+    return false;
+  }
+
+  const selected = primitives.getSelectedTokens()
+    .map((token) => `${token.label}|${token.node && token.node.id}`);
+
+  return recipients.some((recipient) => selected.includes(`${recipient.instanceId}|${recipient.nodeId}`));
+};
+
+/**
+ * Asks the run to deliver this message to that token. The decision is announced rather than performed: the
+ * source driving the engine listens, enqueues it, and the engine takes it when it reaches it — which is why
+ * the offer becomes an hourglass here and stays one until the message goes.
+ */
+MessagesPanel.prototype._deliver = function(message, recipient) {
+  this._awaited.add(asked(message.key, recipient));
+  this._eventBus.fire('manual.decide', {
+    event: 'messageDelivery',
+    payload: {
+      instanceId: recipient.instanceId,
+      nodeId: recipient.nodeId,
+      origin: message.origin,
+      sender: message.sender
+    }
+  });
+  this._render();
+};
+
+/** What identifies one offer: the message, and the token it was offered to. */
+function asked(key, recipient) {
+  return `${key}|${recipient.instanceId}|${recipient.nodeId}`;
 }
 
 MessagesPanel.$inject = [ 'injector', 'eventBus', 'messages', 'config.messagesPanel' ];
@@ -54,9 +111,9 @@ MessagesPanel.prototype._init = function() {
  * It is built from the classes the Tokens tab is built from, `bjs-token-filter` over `bjs-token-inspector`
  * within `bjs-token`, so that the two tabs are one appearance rather than two that resemble each other.
  *
- * The heading carries no filter yet. Filtering the messages by the tokens a reader has selected means
- * knowing which tokens may receive a message, and only an engine standing at the step being shown can say,
- * which is interactive simulation. {@link addFilter} builds it and is called from here when that arrives.
+ * The heading carries the filter over the same relation the rows offer: which tokens may receive a message,
+ * which only an engine standing at the step being shown can say, and which therefore selects nothing while
+ * no such engine stands there.
  */
 MessagesPanel.prototype._build = function() {
   const root = document.createElement('div');
@@ -71,6 +128,13 @@ MessagesPanel.prototype._build = function() {
 
   title.textContent = 'Messages';
   heading.appendChild(title);
+
+  // The filter selects by the same relation the rows offer: a message is "for the selected recipients" when
+  // one of the tokens that may receive it is a token the reader has selected.
+  addFilter(heading, (value) => {
+    this._filter = value;
+    this._render();
+  });
 
   this._inspector = document.createElement('div');
   this._inspector.className = 'bjs-token-inspector';
@@ -96,7 +160,9 @@ MessagesPanel.prototype._render = function() {
 
   this._inspector.innerHTML = '';
 
-  const messages = this._messages.all();
+  const messages = this._filter === 'recipients'
+    ? this._messages.all().filter((message) => this._forSelected(message))
+    : this._messages.all();
 
   if (!messages.length) {
     const hint = document.createElement('div');
@@ -112,7 +178,12 @@ MessagesPanel.prototype._render = function() {
   messages.forEach((message) => {
     const entry = createMessageEntry(message, {
       open: this._open.get(message.key) === true,
-      onToggle: (open) => this._open.set(message.key, open)
+      onToggle: (open) => this._open.set(message.key, open),
+      // a store that holds no relation offers no delivery: the relation is a running engine's answer, and
+      // the panel draws over a store that may be nothing more than what was sent
+      recipients: this._messages.recipients ? this._messages.recipients(message.key) : [],
+      isAwaited: (recipient) => this._awaited.has(asked(message.key, recipient)),
+      onDeliver: (recipient) => this._deliver(message, recipient)
     });
 
     this._inspector.appendChild(entry.element);
@@ -121,8 +192,7 @@ MessagesPanel.prototype._render = function() {
 
 /**
  * Adds the filter to a heading: which messages are listed, all of them or those the selected tokens may
- * receive. Not called yet, since the tokens that may receive a message are what interactive simulation will
- * answer; it is kept so that showing the filter is one call rather than a heading rebuilt from memory.
+ * receive.
  *
  * @param {Element} heading  the heading built by {@link MessagesPanel#_build}
  * @param {Function} onChange  (value) => void, called with 'all' or 'recipients'

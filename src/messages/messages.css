@@ -1,0 +1,44 @@
+/* The Messages tab draws in the Tokens tab's classes and adds nothing to them, with one exception: a
+   message that may be delivered offers that delivery, and an offer is a control rather than a reading.
+   These rules are only about that control. */
+
+/* a recipient reads as an attribute line — the instance, the node it waits at — with the offer at its end */
+.wb-recipient {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-recipient .wb-attribute-value {
+  flex: 1 1 auto;
+}
+
+.wb-deliver {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.wb-deliver svg {
+  width: 12px;
+  height: 12px;
+}
+
+.wb-deliver:hover:not(:disabled) {
+  color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
+/* asked for and waiting on the engine: the offer is spent, so it neither invites nor answers a pointer */
+.wb-deliver:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

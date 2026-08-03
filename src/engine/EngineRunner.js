@@ -14,7 +14,9 @@
  *   enqueue(event, payload)  → Promise<Step>    queue what the user decided, then let it advance again
  *   stop()                   → Promise<void>    end the run and free the engine
  *
- * where Step is `{ entries, alive, time, objective }`.
+ * where Step is `{ entries, decisions, alive, time, objective }`. The decisions are what the engine is
+ * waiting for — `{ type, instanceId, nodeId }`, and for a message delivery the `candidates` it may receive,
+ * each `{ origin, sender }` — since only the engine, standing where it stands, can say.
  */
 export default class EngineRunner {
   constructor() {

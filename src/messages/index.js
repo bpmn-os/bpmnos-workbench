@@ -18,6 +18,7 @@ export class Messages extends MessageStore {
     super();
 
     this._eventBus = eventBus;
+    this._recipients = new Map(); // message key -> the tokens that may receive it
 
     // The braces matter: a listener returning a value is a listener that has answered the event, and
     // diagram-js stops the event there. Returning whether anything was held would keep `diagram.clear`
@@ -25,6 +26,25 @@ export class Messages extends MessageStore {
     eventBus.on([ 'tokens.cleared', 'diagram.clear' ], () => {
       this.clear();
     });
+
+    // What a run is waiting for, as the engine reports it: a message delivery request names the token that
+    // waits and the messages it may receive, which read here as the tokens that may receive each message.
+    // Only an engine standing at the step can say this, so it is held while it is true and dropped with the
+    // run, and it is not part of the store itself, which holds what was sent rather than what may happen.
+    eventBus.on('manual.decisions', ({ decisions }) => {
+      this._recipients = invert(decisions);
+      this._eventBus.fire('messages.changed', {});
+    });
+  }
+
+  /**
+   * The tokens that may receive the message, as the engine last reported them.
+   *
+   * @param {string} key  the message's key in the store
+   * @returns {Array<{instanceId: string, nodeId: string}>}
+   */
+  recipients(key) {
+    return this._recipients.get(key) || [];
   }
 
   apply(record, color) {
@@ -47,6 +67,34 @@ export class Messages extends MessageStore {
 }
 
 Messages.$inject = [ 'eventBus' ];
+
+/**
+ * Reads the pending decisions the other way round: the engine says which messages a waiting token may
+ * receive, and a panel showing messages needs which tokens may receive each message. A message is named
+ * there by its origin and its sender, which is the key the store holds it under.
+ *
+ * @param {Array} decisions  what the engine is waiting for
+ * @returns {Map<string, Array<{instanceId: string, nodeId: string}>>}
+ */
+function invert(decisions) {
+  const recipients = new Map();
+
+  (decisions || []).forEach(({ type, instanceId, nodeId, candidates }) => {
+    if (type !== 'messageDelivery') {
+      return;
+    }
+    (candidates || []).forEach(({ origin, sender }) => {
+      const key = `${origin}|${sender}`;
+
+      if (!recipients.has(key)) {
+        recipients.set(key, []);
+      }
+      recipients.get(key).push({ instanceId, nodeId });
+    });
+  });
+
+  return recipients;
+}
 
 /**
  * The messages module: the store and the tab that shows it.

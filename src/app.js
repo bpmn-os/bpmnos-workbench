@@ -8,6 +8,7 @@ import 'bpmn-js-animation/assets/animation.css';
 import 'bpmn-js-animation/assets/token-panel.css';
 import 'bpmnos-js/bpmnos.css';        // the decision-task and execution-data-box icons
 import './execution-state/execution-state.css'; // the token entry's status/data/globals body
+import './messages/messages.css';               // the offer to deliver a message to a waiting token
 import './app.less';
 
 import BpmnModeler from 'bpmn-js/lib/Modeler.js';

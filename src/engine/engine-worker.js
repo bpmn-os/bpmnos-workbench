@@ -23,16 +23,16 @@ const GREEDY = [
   'FirstEnumeratedChoice', 'CompetingCandidates', 'EnqueuedEvents', 'TimeWarp'
 ];
 
-// The user advances time; everything else still settles itself, including the contested message deliveries
-// and sequential entries that `CompetingCandidates` decides. They belong to the user, but only once there is
-// somewhere to make that decision: without them a model whose messages are not directly addressed — a job
-// shop, say — stands still whatever the clock does, because what it waits for cannot be answered. Each
-// dispatcher leaves this list as its panel arrives.
+// The user advances time and decides which message is delivered to whom; the rest still settles itself.
+// `SequentialEntries` stands where `CompetingCandidates` did, settling the entry of a child of a sequential
+// ad hoc subprocess but not the ambiguous delivery, which is now the user's — the two were decided together
+// while neither had anywhere to be decided. `InstantDirectMessage` stays, an addressed delivery being no
+// decision. Each dispatcher leaves this list as its panel arrives.
 //
 // There is no clock among them, which is what makes the run manual: the engine advances only as far as it
 // can and then stands still until the page enqueues a tick.
 const INTERACTIVE = [
-  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'CompetingCandidates', 'EnqueuedEvents'
+  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'SequentialEntries', 'EnqueuedEvents'
 ];
 
 const ready = createBPMNOS();
@@ -59,14 +59,31 @@ function endSession() {
   session = null;
 }
 
-// What the page is told after every step: the records the engine produced, whether it is still running,
-// and where its clock stands.
+/**
+ * What the engine is waiting for, as the controller has it: every decision left to the caller, and, for a
+ * message delivery, the messages that token may receive, each named by the origin and the sender that
+ * identify it. Only the engine can answer this, and only while it stands where it stands, so it is read
+ * here at each step rather than asked for later.
+ */
+function decisions() {
+  return JSON.parse(session.controller.getPendingDecisions()).map((decision) => {
+    if (decision.type !== 'messageDelivery') {
+      return decision;
+    }
+    const candidates = JSON.parse(session.controller.getMessageCandidates(decision.instanceId, decision.nodeId));
+    return { ...decision, candidates: candidates.map(({ origin, sender }) => ({ origin, sender })) };
+  });
+}
+
+// What the page is told after every step: the records the engine produced, what it is waiting for, whether
+// it is still running, and where its clock stands.
 function report() {
   // emptied in place: the monitor's observer holds this very array, so a fresh one would collect nothing
   const entries = session.entries.splice(0);
   self.postMessage({
     type: 'step',
     entries,
+    decisions: decisions(),
     alive: session.engine.isAlive(),
     time: session.engine.getCurrentTime(),
     objective: session.engine.getWeightedObjective()

@@ -160,7 +160,7 @@ test('a tab with nothing to show says so, in the words the Tokens tab uses', asy
 
   assert.equal(body.querySelector('.bjs-token-empty').textContent, 'No messages.');
   assert.equal(body.querySelector('.bjs-token-filter span').textContent, 'Messages');
-  assert.equal(body.querySelectorAll('.bjs-token-filter input').length, 0, 'no filter until it can mean something');
+  assert.equal(body.querySelectorAll('.bjs-token-filter input').length, 2, 'all, or the selected recipients');
 });
 
 test('a row is the message name and its sender, marked with an envelope in the sender\'s colour', async () => {
