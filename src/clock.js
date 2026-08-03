@@ -111,12 +111,16 @@ export default function createClock(modeler) {
     el.classList.toggle('wb-clock-waiting', !!on);
   }
 
+  // A tick is offered only while it can be answered: the engine waits and the diagram has caught up, which
+  // is what the waiting state says. Clicking at any other moment would do nothing and say nothing.
   el.addEventListener('click', () => {
-    if (el.classList.contains('wb-clock-interactive')) {
+    if (el.classList.contains('wb-clock-interactive') && el.classList.contains('wb-clock-waiting')) {
       eventBus.fire('clock.tick', {});
     }
   });
 
+  // the clock is a control only where a tick means something, which is the source the user drives; the
+  // readout follows the run itself, which a source switch has already ended and refreshed by now
   eventBus.on('source.changed', event => setInteractive(event.source === 'manual'));
 
   modeler.on('playback.time', event => setTime(event.time));

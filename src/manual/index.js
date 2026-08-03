@@ -30,19 +30,21 @@ export default function createManual(modeler, clock) {
   let input = null;         // the input provider, while active
   let controlHandle = null; // handle from tokenPanel.addControl
   let running = false;      // a run has begun and has not been ended
+  let stalled = false;      // the engine is alive and can fetch no event: it waits for the user
+  let drained = false;      // the diagram shows everything the engine has produced so far
 
   function activate() {
     if (!tokenPanel || input) {
       return;
     }
     input = createInput(modeler, runner);
-    input.onChange(restart);
+    input.onChange(syncSource);
     controlHandle = tokenPanel.addControl(input.element);
     input.load();
   }
 
   function deactivate() {
-    end();
+    abandon();
     if (controlHandle) {
       controlHandle.remove();
       controlHandle = null;
@@ -53,38 +55,67 @@ export default function createManual(modeler, clock) {
     }
   }
 
-  // The run begins as soon as there is something to run, and begins again whenever the input changes:
-  // what a run is given cannot change under it, so a change is a new run rather than an amendment.
-  async function restart() {
-    await end();
+  // A run is offered to the transport once there is something to run, and withdrawn otherwise. What a run
+  // is given cannot change under it, so a change to the input gives up the run rather than amending it, and
+  // the next start is a new run.
+  async function syncSource() {
+    await abandon();
+    playback.setLogSource(input && input.ready() ? begin : null);
+  }
 
-    if (!input || !input.ready()) {
-      return;
-    }
-
+  // The transport starts a run: the engine is given the input as it now stands and runs as far as it can,
+  // and what it produces is played as it arrives rather than after the run. What is returned is the log the
+  // transport starts playing, which is the stream's own growing array rather than a copy, so everything
+  // pushed later is played by the same run.
+  async function begin() {
     for (const [ name, csv ] of Object.entries(input.getLookups())) {
       runner.setLookup(name, csv);
     }
 
     running = true;
-    playback.startStream();
+    stalled = false;
+    drained = false;
+    playback.beginStream();
 
     try {
       apply(await runner.start(input.getInstances()));
     } catch (err) {
       console.error('[manual] run failed to start:', err);
-      await end();
+      await abandon();
+      return null;
     }
+    return playback.getLog();
   }
 
-  async function end() {
+  // The engine has run itself out. What it produced last is still being played, so the stream is closed
+  // rather than stopped: the player finishes what it holds and ends by itself, and the diagram shows the
+  // whole run rather than as much of it as had been drawn when the engine finished.
+  async function finish() {
     if (!running) {
       return;
     }
     running = false;
+    stalled = false;
+    clock.setWaiting(false);
+    playback.endStream();
+    await release();
+  }
+
+  // The run is given up rather than finished — the input changed, the source was left, a step failed — so
+  // what is unplayed is discarded with it.
+  async function abandon() {
+    if (!running) {
+      return;
+    }
+    running = false;
+    stalled = false;
     clock.setWaiting(false);
     playback.endStream();
     await playback.stop();
+    await release();
+  }
+
+  async function release() {
     try {
       await runner.stop();
     } catch (err) {
@@ -92,41 +123,73 @@ export default function createManual(modeler, clock) {
     }
   }
 
-  // What the engine produced since it was last let go, and where it now stands: alive with nothing further
-  // to fetch is the engine waiting for the user, which the clock says by pulsing.
+  // What the engine produced since it was last let go, and where it now stands. Alive with nothing further
+  // to fetch is the engine waiting for the user; the clock says so only once the diagram has caught up,
+  // since inviting a decision over a diagram that is still moving invites it over a state that is not yet
+  // shown.
   function apply(step) {
     if (!running || !step) {
       return;
     }
+    drained = false;
     playback.push(step.entries);
 
     if (step.alive) {
-      clock.setWaiting(true);
+      stalled = true;
     } else {
-      end();
+      finish();
     }
+  }
+
+  function sayWaiting() {
+    clock.setWaiting(running && stalled && drained);
   }
 
   // Everything the user decides reaches the engine here, named rather than typed: a clock tick today, a
   // message delivery, a choice or an entry when those are built, each one queued and the engine let go.
   async function decide(event, payload) {
-    if (!running) {
+    if (!running || !stalled) {
       return;
     }
+    stalled = false;
     clock.setWaiting(false);
     try {
       apply(await runner.enqueue(event, payload));
     } catch (err) {
       console.error('[manual] step failed:', err);
-      await end();
+      await abandon();
     }
   }
 
-  // the clock is the control that advances time, and it says only that it was clicked
-  eventBus.on('clock.tick', () => decide('clockTick'));
+  // the player has played everything it holds, so what the diagram shows is what the engine has done
+  eventBus.on('playback.drained', () => {
+    drained = true;
+    sayWaiting();
+  });
 
-  // a new model was imported — if manual is active, the input is derived from it afresh, which restarts
-  eventBus.on('import.done', () => input && input.load());
+  // the clock is the control that advances time, and it says only that it was clicked
+  eventBus.on('clock.tick', () => {
+    decide('clockTick'); // not returned: an answered event stops there, and a promise is an answer
+  });
+
+  // Refresh gives up the run rather than merely clearing what is drawn: a manual run cannot be resumed from
+  // where it stood, the engine having been carried there by the user, so the next start is a new run. The
+  // panel has stopped playback and cleared the canvas before firing, and the clock blanks its readout on
+  // the same event.
+  eventBus.on('tokenPanel.refresh', () => {
+    if (input) {
+      syncSource();
+    }
+  });
+
+  // A new model was imported: the input is derived from it afresh, which withdraws the run source until
+  // there is something to run again. The braces are not decoration — diagram-js stops an event a listener
+  // answers, so returning anything here would keep every later listener from hearing the import.
+  eventBus.on('import.done', () => {
+    if (input) {
+      input.load();
+    }
+  });
 
   eventBus.on([ 'diagram.destroy' ], () => runner.destroy());
 

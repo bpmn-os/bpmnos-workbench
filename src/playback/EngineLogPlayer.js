@@ -102,9 +102,18 @@ EngineLogPlayer.prototype.getLog = function() {
  * store, the messages — is as it is for a recorded log, since a record is a record however it got here.
  */
 EngineLogPlayer.prototype.startStream = function() {
+  this.beginStream();
+  return this.play();
+};
+
+/**
+ * Declare that records will be pushed, without playing yet. A caller whose run is started by the transport
+ * rather than by itself opens the stream here and lets the transport call `play`, which then finds a log
+ * that grows rather than one that is complete.
+ */
+EngineLogPlayer.prototype.beginStream = function() {
   this._streaming = true;
   this._log = [];
-  return this.play();
 };
 
 /** Append records of a run in progress, waking the player if it has caught up. */
@@ -117,7 +126,10 @@ EngineLogPlayer.prototype.push = function(entries) {
   this._wake();
 };
 
-/** No more records are coming: the player finishes what it holds and stops. */
+/**
+ * No more records are coming: the player finishes what it holds and stops of its own accord. A caller that
+ * wants the run abandoned rather than finished calls `stop`, which discards whatever is unplayed.
+ */
 EngineLogPlayer.prototype.endStream = function() {
   this._streaming = false;
   this._wake();
@@ -177,8 +189,9 @@ EngineLogPlayer.prototype._setState = function(state) {
   this._eventBus.fire('playback.changed', { state });
 };
 
+// `null` is a time too: it says the player holds no run, and the readout follows it like any other value.
 EngineLogPlayer.prototype._setTime = function(time) {
-  if (time == null || time === this._time) {
+  if (time === undefined || time === this._time) {
     return;
   }
   this._time = time;
@@ -234,6 +247,9 @@ EngineLogPlayer.prototype.play = async function(log) {
           if (!this._streaming) {
             return;
           }
+          // Nothing left to play and more still to come: the diagram now shows everything that has
+          // happened, which is what a caller waits for before asking the user to decide what happens next.
+          this._eventBus.fire('playback.drained', {});
           await new Promise(resolve => { this._arrival = resolve; });
           await this._gate();
         }
@@ -294,11 +310,17 @@ EngineLogPlayer.prototype.stop = async function() {
   this._aborted = true;
   this._paused = false;
   this._drainResumers();
+  // A streamed run may be parked waiting for records that will now never come, and only a wake releases
+  // it; without this, stopping such a run waits for it forever and whatever follows the stop never runs.
+  this._wake();
   try {
     await this._run;
   } catch (err) {
     // an abort surfaces as a rejected run on some paths — swallow it
   }
+  // The run is given up rather than finished, so its time is the time of nothing and goes with it. A run
+  // that plays to its end keeps its final time, `stop` not being called for it.
+  this._setTime(null);
 };
 
 /** One run/pause button: idle→play, playing→pause, paused→resume. */

@@ -40,6 +40,9 @@
   width: 1em;
   height: 1em;
   flex: 0 0 auto;
+  /* the circle's stroke sits on the edge of the viewBox, so anything that scales the icon — the waiting
+     pulse — would have its outer edge clipped by the SVG viewport */
+  overflow: visible;
 }
 
 /* While the user advances time the clock is a control rather than a readout: it takes the pointer, says so
@@ -48,10 +51,16 @@
 
 .wb-clock.wb-clock-interactive {
   pointer-events: auto;
+  cursor: default;
+}
+
+/* A tick is offered only while the engine waits and the diagram has caught up — the waiting state. Before
+   that a click would be swallowed, so the clock neither invites one nor answers a hover. */
+.wb-clock.wb-clock-interactive.wb-clock-waiting {
   cursor: pointer;
 }
 
-.wb-clock.wb-clock-interactive:hover {
+.wb-clock.wb-clock-interactive.wb-clock-waiting:hover {
   color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
 }
 

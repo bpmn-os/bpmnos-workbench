@@ -55,6 +55,7 @@ export default function createModeButtons(modeler, greedy, manual) {
   const canvas = modeler.get('canvas');
   const sidePanel = modeler.get('sidePanel', false);
   const animation = modeler.get('animation', false);
+  const playback = modeler.get('playback', false);
   const tokenPanel = modeler.get('tokenPanel', false);
   const container = canvas.getContainer();
 
@@ -74,13 +75,29 @@ export default function createModeButtons(modeler, greedy, manual) {
     buttons.forEach(b => domClasses(b).toggle('active', b.getAttribute('data-source') === source));
   }
 
-  function setSource(requested) {
-    const next = requested === source ? null : requested; // clicking the active source returns to Model
-    if (next !== source && animation) {
-      // a source switch is a fresh simulation session, so clear the tokens. mode.setMode() only clears
-      // when the anim mode actually changes, and greedy↔playback both map to 'playback' — so that one
-      // transition would otherwise carry a run's tokens across. This owns that clearing here in bpmnos.
+  // A source switch is a fresh session, so it does what the panel's Refresh does: stop what is playing,
+  // clear the tokens, and announce it, whereupon each source gives up its run and the clock blanks its
+  // readout. mode.setMode() clears only when the anim mode actually changes, and all three sources map to
+  // 'playback', so that alone would carry a run's tokens across. The panel keeps its own refresh private,
+  // hence the three steps here rather than a call to it.
+  //
+  // The stop is awaited: a player walks its log asynchronously, so clearing the canvas without waiting
+  // leaves it applying the next record to a diagram whose tokens are gone, which fails as "no token <x>
+  // at <y>". The run ends first, then what it drew is cleared.
+  async function refreshSession() {
+    if (playback) {
+      await playback.stop();
+    }
+    if (animation) {
       animation.clear();
+    }
+    eventBus.fire('tokenPanel.refresh', {});
+  }
+
+  async function setSource(requested) {
+    const next = requested === source ? null : requested; // clicking the active source returns to Model
+    if (next !== source) {
+      await refreshSession();
     }
     source = next;
     if (source === 'manual') {

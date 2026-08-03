@@ -48,9 +48,14 @@ properties panel, auto-hosted as the side panel's "Properties" tab), `bpmn-workb
 rules/issues/toolbar, and **native playback of BPMN-OS engine execution logs**. It boots on a **blank
 diagram** — nothing is hardwired: load a model with the toolbar and an engine `-log.json` with the Tokens
 tab's "Load log". `src/examples/earliest-arrival.{bpmn,-log.json}` (the EAP instance from
-`BPMNOSInstances.jl`) is a loadable sample, not auto-loaded, and the tests play that very log. Manual
-(interactive) simulation is **not** built yet; greedy simulation runs the wasm engine live (`src/greedy/`,
-through `src/engine/` and `src/input/`) and playback replays a recorded `-log.json`.
+`BPMNOSInstances.jl`) is a loadable sample, not auto-loaded, and the tests play that very log. Greedy
+simulation runs the wasm engine live (`src/greedy/`, through `src/engine/` and `src/input/`) and playback
+replays a recorded `-log.json`. Manual simulation (`src/manual/`) drives the same engine step by step: its
+controller is composed without a clock, so the engine runs as far as it can and then stands still, the
+canvas clock pulses once the diagram has caught up, and a click on it enqueues a clock tick that lets the
+engine carry on. What it produces is played as it arrives rather than after the run. The decisions a user
+will make — a message delivery, a choice, a sequential entry — reach the engine through the same call and
+need no protocol of their own.
 
 **Reuse upstream, don't reinvent.** The playback UI is bpmn-js-animation's own **TokenPanel** (the
 "Tokens" side-panel tab: run/pause, speed, Load log); the mode toggle uses bpmn-workbench's mode-button

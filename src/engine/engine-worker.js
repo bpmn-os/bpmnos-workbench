@@ -23,11 +23,16 @@ const GREEDY = [
   'FirstEnumeratedChoice', 'CompetingCandidates', 'EnqueuedEvents', 'TimeWarp'
 ];
 
-// What is unambiguous still settles itself; the choice, the entry of a child of a sequential ad hoc
-// subprocess and the ambiguous message delivery are left for the page to decide, and there is no clock, so
-// time advances only by a tick the page enqueues.
+// The user advances time; everything else still settles itself, including the contested message deliveries
+// and sequential entries that `CompetingCandidates` decides. They belong to the user, but only once there is
+// somewhere to make that decision: without them a model whose messages are not directly addressed — a job
+// shop, say — stands still whatever the clock does, because what it waits for cannot be answered. Each
+// dispatcher leaves this list as its panel arrives.
+//
+// There is no clock among them, which is what makes the run manual: the engine advances only as far as it
+// can and then stands still until the page enqueues a tick.
 const INTERACTIVE = [
-  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'EnqueuedEvents'
+  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'CompetingCandidates', 'EnqueuedEvents'
 ];
 
 const ready = createBPMNOS();
@@ -57,8 +62,8 @@ function endSession() {
 // What the page is told after every step: the records the engine produced, whether it is still running,
 // and where its clock stands.
 function report() {
-  const entries = session.entries;
-  session.entries = [];
+  // emptied in place: the monitor's observer holds this very array, so a fresh one would collect nothing
+  const entries = session.entries.splice(0);
   self.postMessage({
     type: 'step',
     entries,
