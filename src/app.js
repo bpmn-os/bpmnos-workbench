@@ -9,6 +9,7 @@ import 'bpmn-js-animation/assets/token-panel.css';
 import 'bpmnos-js/bpmnos.css';        // the decision-task and execution-data-box icons
 import './execution-state/execution-state.css'; // the token entry's status/data/globals body
 import './messages/messages.css';               // the offer to deliver a message to a waiting token
+import './sequences/sequences.css';             // the divider of a performer's list
 import './app.less';
 
 import BpmnModeler from 'bpmn-js/lib/Modeler.js';
@@ -38,6 +39,7 @@ import EnginePlaybackModule from './playback/index.js';
 // → `executionState`: the values a run produces, and the body of a token entry that shows them
 import ExecutionStateModule, { createTokenDetailRenderer } from './execution-state/index.js';
 import MessagesModule from './messages/index.js';        // → the "Messages" tab
+import SequencesModule from './sequences/index.js';      // → the "Sequences" tab
 import TokenRowsModule from './token-rows/index.js';     // token rows a decision panel mounts
 import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
 import createManual from './manual/index.js';           // manual simulation: the user advances the run
@@ -108,6 +110,10 @@ const modeler = new BpmnModeler({
     // a run sends the messages, so in Model mode the tab says how a run is started, as the Tokens tab does
     modelNote: runNote
   },
+  sequencesPanel: {
+    // a run has the performers, so in Model mode this tab says the same as the two above it
+    modelNote: runNote
+  },
   mode: {
     // read-only outside Model mode, except for the execution data box (see `modeExceptions`)
     exceptions: modeExceptions
@@ -135,6 +141,7 @@ const modeler = new BpmnModeler({
     ModeModule,           // → mode.setMode('model'|'playback')
     ExecutionStateModule, // → `executionState`: status, data and globals per token, written by the player
     MessagesModule,       // → the "Messages" tab
+    SequencesModule,      // → the "Sequences" tab
     TokenRowsModule,      // token rows, drawn as the Tokens tab draws them, for panels that decide
     EnginePlaybackModule  // → overrides `playback` with the native engine-log player (list last)
   ],
@@ -183,6 +190,12 @@ const clock = createClock(modeler);
 const greedy = createGreedy(modeler);
 const manual = createManual(modeler, clock);
 createModeButtons(modeler, greedy, manual);
+
+// The modeller is reachable from the browser console while developing, so that a panel can be driven with a
+// fixture through the very events a run uses. It is not exposed by a production build.
+if (import.meta.env.DEV) {
+  window.modeler = modeler;
+}
 
 // Optional deep-linking: ?src=<url> loads a diagram on startup.
 const src = new URL(window.location.href).searchParams.get('src');

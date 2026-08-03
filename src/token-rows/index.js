@@ -10,8 +10,11 @@ import createTokenEntry from 'bpmn-js-animation/lib/TokenEntry.js';
  * was selected, and the row is updated in place.
  *
  * What the panel adds is its own: a control the row carries, and a contribution to what the row discloses.
- * The control sits in the row's controls slot, where its clicks neither select the token nor advance it;
- * the contribution is drawn after the host's own detail, in the same body.
+ * The control sits in the row's controls slot, where its clicks do not select the token; the contribution
+ * is drawn after the host's own detail, in the same body.
+ *
+ * A click on the row selects the token it shows, as a click in the Tokens tab does, so that a token picked
+ * out in one list is picked out in every list and on the canvas.
  *
  * A token the animation has not drawn stands in for itself with the instance and the node it waits at, the
  * engine running ahead of what has been played.
@@ -23,6 +26,7 @@ import createTokenEntry from 'bpmn-js-animation/lib/TokenEntry.js';
  */
 export function TokenRows(injector, eventBus) {
   this._injector = injector;
+  this._eventBus = eventBus;
   this._rows = new Map();
 
   eventBus.on([
@@ -56,7 +60,8 @@ TokenRows.prototype.create = function(key, identity, options = {}) {
   const entry = createTokenEntry(this._token(identity), {
     controls: options.control,
     displayNode: (id) => this._displayNode(id),
-    renderDetail: this._detail(options.detail)
+    renderDetail: this._detail(options.detail),
+    onClick: (token) => this._select(token)
   });
 
   const row = {
@@ -68,6 +73,34 @@ TokenRows.prototype.create = function(key, identity, options = {}) {
   this._rows.set(key, row);
 
   return row;
+};
+
+/**
+ * Selecting the token a row shows, which is what a click on it does, exactly as a click in the Tokens tab
+ * does: the token's stacks are brought to the front and the ordinary click-selection is announced, so a
+ * token selected here is selected on the canvas and in every other list showing it.
+ *
+ * A token the animation has not drawn is a stand-in with no stack to reveal and nothing to select, so its
+ * row stays inert rather than announcing a click for a token that is not there.
+ *
+ * A double click is not offered. In the Tokens tab it advances the token, and in this application the
+ * engine advances tokens; a decision panel that advanced one would be a second way to drive the run.
+ */
+TokenRows.prototype._select = function(token) {
+  const animation = this._injector.get('animation', false);
+
+  if (!token.state) {
+    return; // a stand-in: the engine is ahead of what has been drawn
+  }
+
+  Promise.resolve(animation && animation.reveal(token)).then(() => {
+    this._eventBus.fire('token.click', {
+      node: token.node,
+      label: token.label,
+      sequenceFlow: token.state.sequenceFlow || null,
+      stackIndices: token.stackIndices || {}
+    });
+  });
 };
 
 /**

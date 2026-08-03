@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bpmnos-workbench · the panels a run concerns (review demo)</title>
+  <link rel="stylesheet" href="/node_modules/bpmn-js-side-panel/assets/side-panel.css">
+  <link rel="stylesheet" href="/node_modules/bpmn-js-animation/assets/token-panel.css">
+  <link rel="stylesheet" href="/src/execution-state/execution-state.css">
+  <link rel="stylesheet" href="/src/messages/messages.css">
+  <link rel="stylesheet" href="/src/sequences/sequences.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: hsl(225, 10%, 90%);
+      color: hsl(225, 10%, 15%);
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      padding: 24px;
+    }
+    /* stands in for a side-panel pane: entries are full-width, so the pane has no horizontal padding */
+    .pane {
+      width: 320px;
+      flex: 0 0 auto;
+      background: #fff;
+      border: 1px solid var(--bjs-grey-75);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .pane-header {
+      padding: 10px 12px;
+      font-weight: 600;
+      background: var(--bjs-grey-97);
+      border-bottom: 1px solid var(--bjs-grey-75);
+    }
+    .side { flex: 1 1 auto; min-width: 0; }
+    .side h2 { font-size: 13px; margin: 0 0 8px; color: hsl(225, 10%, 35%); }
+    pre {
+      margin: 0; background: #1e1f24; color: #d6d8de; padding: 12px; border-radius: 4px;
+      overflow: auto; font: 12px/1.5 "SFMono-Regular", Consolas, monospace; white-space: pre;
+    }
+    .hint { font-size: 12px; color: hsl(225, 10%, 45%); margin: 10px 0 0; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="pane">
+    <div class="pane-header">Sequences</div>
+    <div id="pane"></div>
+  </div>
+
+  <div class="pane">
+    <div class="pane-header">Messages</div>
+    <div id="pane-messages"></div>
+  </div>
+
+  <div class="side">
+    <h2>What the store holds (live)</h2>
+    <pre id="out"></pre>
+    <h2 style="margin-top:16px">Selected tokens</h2>
+    <div id="selection"></div>
+    <p class="hint">
+      Both tabs over stores fed with a hardcoded report rather than with a run, side by side because they
+      are built from the same classes and must look it. The first performer is an ad hoc sub-process, idle,
+      with three tokens waiting; the second is a sub-process conducting one, which stands at the head of its
+      list as a fixed entry and carries no arrows; the third is a process standing idle with nothing under
+      it. Move a row with ▲ and ▼ and watch the order above: that is what a later report is read against.
+      Nothing passes the fixed entry, and the divider is a row of the list like any other, so moving it is
+      the same act as moving a token past it. Tick a token to select it and the filter of either heading
+      narrows to what that selection concerns.
+    </p>
+  </div>
+
+  <script type="module">
+    import { createCollapsibleEntry } from 'bpmn-js-side-panel';
+
+    import { Sequences } from '/src/sequences/index.js';
+    import SequencesPanel from '/src/sequences/Panel.js';
+    import { Messages } from '/src/messages/index.js';
+    import MessagesPanel from '/src/messages/Panel.js';
+    import { TokenRows } from '/src/token-rows/index.js';
+
+    // What a run would report, hardcoded: the performers of AdHocSubProcess.bpmn, one idle, one conducting,
+    // one empty, with the entry requests the engine would have pending for the tokens that wait.
+    const REPORT = {
+      performers: [
+        {
+          performer: { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'AdHocSubProcess_1' },
+          performing: null,
+          waiting: [
+            { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'Activity_1' },
+            { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'Activity_2' },
+            { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'Activity_3' }
+          ]
+        },
+        {
+          performer: { processId: 'Process_1', instanceId: 'Instance_2', nodeId: 'SubProcess_1' },
+          performing: { processId: 'Process_1', instanceId: 'Instance_2', nodeId: 'Activity_1' },
+          waiting: [
+            { processId: 'Process_1', instanceId: 'Instance_2', nodeId: 'Activity_2' }
+          ]
+        },
+        {
+          performer: { processId: 'Process_1', instanceId: 'Instance_3' },
+          performing: null,
+          waiting: []
+        }
+      ],
+      decisions: [
+        { type: 'entry', instanceId: 'Instance_1', nodeId: 'Activity_1' },
+        { type: 'entry', instanceId: 'Instance_1', nodeId: 'Activity_2' },
+        { type: 'entry', instanceId: 'Instance_1', nodeId: 'Activity_3' },
+        { type: 'entry', instanceId: 'Instance_2', nodeId: 'Activity_2' },
+        {
+          type: 'messageDelivery',
+          instanceId: 'Instance_2',
+          nodeId: 'Activity_2',
+          candidates: [ { origin: 'RequestTask', sender: 'Instance_1' } ]
+        }
+      ]
+    };
+
+    // what an element registry would say of the nodes the performers stand at, which is what decides the
+    // symbol each is drawn with; the third performer carries no node and stands at the process
+    const ELEMENTS = {
+      AdHocSubProcess_1: { businessObject: { $type: 'bpmn:AdHocSubProcess' } },
+      SubProcess_1: { businessObject: { $type: 'bpmn:SubProcess' } }
+    };
+
+    // what a token holds, as the host's own renderer would draw it from the execution state; the sequences
+    // panel asks nothing of it beyond that it exists, and here it stands in for the running application
+    const HELD = {
+      Activity_1: { Status: { timestamp: 0, duration: 3 }, Data: { job: 'A' } },
+      Activity_2: { Status: { timestamp: 0, duration: 7 }, Data: { job: 'B' } },
+      Activity_3: { Status: { timestamp: 0, duration: 2 }, Data: { job: 'C' } }
+    };
+
+    // the tokens the animation would have drawn, which is where a row takes its colour and its state from
+    const COLORS = { Instance_1: '#1a73e8', Instance_2: '#e8710a', Instance_3: '#188038' };
+
+    const TOKENS = REPORT.performers.flatMap((entry) =>
+      [ entry.performer, entry.performing, ...entry.waiting ].filter(Boolean).map((identity) => ({
+        label: identity.instanceId,
+        node: identity.nodeId,
+        color: COLORS[identity.instanceId],
+        state: 'READY',
+        selected: false
+      })));
+
+    // the services the panel asks for, each of them optional to it, so a stub is a stub and not a fake
+    const eventBus = {
+      _listeners: new Map(),
+      on(events, callback) {
+        [].concat(events).forEach((event) =>
+          this._listeners.set(event, (this._listeners.get(event) || []).concat(callback)));
+      },
+      fire(event, payload) {
+        (this._listeners.get(event) || []).forEach((callback) => callback(payload || {}));
+      }
+    };
+
+    // the animation's tokens: what a row takes its colour from, and what the filter reads a selection from
+    let selected = [];
+    const primitives = {
+      getTokens: (filter) => filter ? TOKENS.filter(filter) : TOKENS,
+      getSelectedTokens: () => selected
+    };
+
+    const elementRegistry = { get: (id) => ELEMENTS[id] };
+
+    // a click on a row selects the token it shows: the animation brings its stacks forward and the panel
+    // announces the ordinary click-selection, which the application answers by selecting the token
+    const animation = { reveal: () => Promise.resolve() };
+
+    eventBus.on('token.click', ({ label, node }) => {
+      const token = TOKENS.find((one) => one.label === label && one.node === node);
+
+      if (!token) {
+        return;
+      }
+
+      // as the animation answers a plain click: the rest is cleared and this one is selected, unless it
+      // was the sole selection, which a second click on it clears
+      const sole = TOKENS.filter((one) => one.selected);
+
+      TOKENS.forEach((one) => { one.selected = one === token && !(sole.length === 1 && token.selected); });
+      selected = TOKENS.filter((one) => one.selected);
+      boxes.forEach((box, one) => { box.checked = !!one.selected; });
+      eventBus.fire('token.selection.changed', {});
+    });
+
+    // the host's token detail, which every list of tokens in this application is given so that a token
+    // reads the same wherever it is shown; in the application it is the execution state's own view
+    const tokenPanelConfig = {
+      renderTokenDetail: (token, element) => {
+        const held = HELD[token.node];
+
+        if (!held) {
+          return;
+        }
+
+        Object.entries(held).forEach(([ label, values ]) => {
+          const entry = createCollapsibleEntry({ label, open: true, caretSide: 'left' });
+
+          Object.entries(values).forEach(([ name, value ]) => {
+            const line = document.createElement('div'),
+                  nameEl = document.createElement('span'),
+                  valueEl = document.createElement('span');
+
+            line.className = 'wb-attribute';
+            nameEl.className = 'wb-attribute-name';
+            valueEl.className = 'wb-attribute-value';
+            nameEl.textContent = name;
+            valueEl.textContent = String(value);
+            line.append(nameEl, valueEl);
+            entry.contentEl.appendChild(line);
+          });
+
+          element.appendChild(entry.element);
+        });
+      }
+    };
+
+    const sidePanel = {
+      addTab: ({ id }) => ({ body: document.getElementById(id === 'messages' ? 'pane-messages' : 'pane') }),
+      setNote() {}
+    };
+
+    const services = {
+      eventBus, primitives, sidePanel, elementRegistry, animation,
+      'config.tokenPanel': tokenPanelConfig
+    };
+
+    const injector = {
+      get(name, strict) {
+        if (name === 'tokenRows') {
+          return tokenRows;
+        }
+        if (services[name]) {
+          return services[name];
+        }
+        if (strict === false) {
+          return null;
+        }
+        throw new Error('no provider for ' + name);
+      }
+    };
+
+    const tokenRows = new TokenRows(injector, eventBus);
+    const sequences = new Sequences(eventBus);
+    const messages = new Messages(eventBus);
+
+    services.sequences = sequences;
+    services.messages = messages;
+
+    // no model note: the demo is the content of the tabs rather than the application they sit in
+    new SequencesPanel(injector, eventBus, sequences, {});
+    new MessagesPanel(injector, eventBus, messages, {});
+
+    // one message waiting, so that the two tabs can be read against each other: they are built from the
+    // same classes and must look it
+    messages.apply({
+      origin: 'RequestTask',
+      state: 'CREATED',
+      header: { name: 'Request', sender: 'Instance_1', recipient: null, machine: 'M1' },
+      content: { Duration: 7, Job: 'B' }
+    }, COLORS.Instance_1);
+
+    const out = document.getElementById('out');
+
+    const show = () => {
+      out.textContent = sequences.all().map((held) =>
+        held.key + '\n' + held.order.map((key) =>
+          (key === held.fixed ? '  = ' : '    ') + key).join('\n')).join('\n\n');
+    };
+
+    eventBus.on('sequences.changed', show);
+    eventBus.on('manual.decide', ({ event, payload }) =>
+      console.log('[demo] decided', event, payload));
+
+    // a selection the reader can make without a canvas, so that both filters can be read against it, and
+    // which follows a click on a row as it would follow a click on the canvas
+    const selection = document.getElementById('selection');
+
+    const boxes = new Map();
+
+    TOKENS.filter((token) => token.node).forEach((token) => {
+      const label = document.createElement('label'),
+            box = document.createElement('input');
+
+      label.style.cssText = 'display:block;font-size:12px;color:hsl(225,10%,35%)';
+      box.type = 'checkbox';
+      box.addEventListener('change', () => {
+        // selection is a property of the token, which is what tints its row wherever the row is shown, and
+        // it is what the filters read; the animation would set both and announce the change as this does
+        token.selected = box.checked;
+        selected = box.checked ? selected.concat(token) : selected.filter((one) => one !== token);
+        eventBus.fire('token.selection.changed', {});
+      });
+
+      label.append(box, document.createTextNode(' ' + token.label + ' @ ' + token.node));
+      selection.appendChild(label);
+      boxes.set(token, box);
+    });
+
+    eventBus.fire('diagram.init', {});
+    eventBus.fire('manual.decisions', REPORT);
+    show();
+
+    // the order is recorded as the reader sets it, so the readout follows every reorder
+    const observer = new MutationObserver(show);
+    observer.observe(document.getElementById('pane'), { childList: true, subtree: true });
+  </script>
+</body>
+</html>

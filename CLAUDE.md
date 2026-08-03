@@ -84,10 +84,28 @@ Key source (this repo):
   read from `manual.decisions` and held beside the store as a relation rather than in it; the heading's
   filter selects on that same relation, so "selected tokens" narrows both which messages are listed and
   which of a message's tokens are shown under it.
+- `src/sequences/` — the sequential performers of a run and the order each works through: `Store.js` (plain,
+  node-testable, holding per performer the reader's order as one list of keys with the divider among them,
+  the token being conducted, and the token given to the engine), `index.js` (the `sequences` service, which
+  reads the performers from the `manual.decisions` announcement and answers by enqueuing the first token
+  above the divider whenever a report shows an idle performer asking for one), `Panel.js` (the "Sequences"
+  tab, one `createOrderedListEntry` per performer holding the fixed entry, the waiting tokens and the
+  divider), `PerformerEntry.js` (the performer drawn as `bpmn-font`'s participant, collapsed sub-process or
+  ad hoc sub-process, marked with its token) and `sequences.css`.
+  Answering every report that shows an idle performer asking is the whole of what a void decision needs:
+  enqueuing resumes the engine, so a report repeating itself is a report that the last decision did not take
+  effect. The pin on a token given to the engine is therefore a mark, not a guard.
+- `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
+  since radios of one name are one group and two tabs are alive at once.
+- `demo/panels.html` — the tabs a run concerns over stores fed by hand: no model, no mode, no console, and
+  nothing of it under `src/`. It is where a panel is designed and reviewed before it is wired to a run.
 - `src/token-rows/` — the `tokenRows` service: a token drawn as the Tokens tab draws it, wherever a panel
   asks something of the reader about it. The row is `createTokenEntry` given what the token panel gives its
   own rows, so a token reads the same everywhere; a panel adds a control the row carries and, later, a
-  contribution to what the row discloses. The service follows the animation's token events and updates every
+  contribution to what the row discloses. A click on a row selects the token as a click in the Tokens tab
+  does, reveal and then `token.click`, so a token picked out in one list is picked out everywhere; a token
+  the animation has not drawn is inert, and no double click advances anything, the engine advancing tokens
+  in this application. The service follows the animation's token events and updates every
   row it handed out, and holds a row under the key its caller gives it — one token is a candidate for many
   messages, and one element cannot stand in two lists.
   A listener that clears must not *return* the clearance: diagram-js stops an event a listener answers, and

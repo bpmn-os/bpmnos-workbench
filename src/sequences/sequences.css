@@ -1,0 +1,33 @@
+/* The Sequences tab draws in the Tokens tab's classes and in the side panel's ordered list, and adds only
+   what neither of them can say: that a performer is drawn as the node it stands at, and that one row of its
+   list is no token but the mark of what it takes on its own. */
+
+/* the symbol keeps its lane whatever it is drawn as, and is centred in it, so the participant, the
+   sub-process and the ad hoc sub-process share one middle and the names beside them line up too */
+.wb-performer-symbol {
+  flex: 0 0 28px;
+}
+
+/* The list is centred under the symbol rather than under the row: the arrows of an entry belong to the
+   performer above them, and reading them under its symbol says so. The strip's own arrows sit 12px from the
+   list's left edge, and the symbol is centred in a 28px lane that starts where the body starts, so the list
+   gives back half that lane less those 12px. Both numbers are the ones `PerformerEntry.js` draws with, and
+   the symbol is centred in its lane so that this holds for all three symbols alike. */
+.wb-performer-list {
+  margin-left: 2px;   /* 28px / 2 − 12px */
+  margin-right: -4px;
+}
+
+/* The divider reads as a statement rather than as an entry: the muted type of a list title, so that it
+   separates the rows without competing with them. It is given the height of the reorder strip, which is the
+   height every other row of the list has, so that its words sit on the midpoint between the arrows beside
+   them rather than at the top of a shorter row. */
+.wb-performer-divider .bjs-simple-entry-row {
+  min-height: 36px;
+}
+
+.wb-performer-divider .bjs-simple-entry-title {
+  font-style: italic;
+  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
+  white-space: normal;
+}
