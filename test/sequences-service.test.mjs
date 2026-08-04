@@ -7,140 +7,176 @@ import { DIVIDER } from '../src/sequences/Store.js';
 import { createEventBus } from './support/animation.mjs';
 
 /**
- * The service reads the performers and the pending decisions from one announcement, `manual.decisions`, and
- * answers for a performer that is idle and asking: the first token above its divider is enqueued through
- * `manual.decide`, which is where every decision of this application goes.
+ * The service is the store with a diagram around it: what the player writes into it is announced, and a
+ * performer conducting nothing offers the first token above its divider through `manual.decide`, which is
+ * where every decision of this application goes. It holds no pacing of its own, the store being written as
+ * the diagram is drawn.
  */
 
-const token = (instanceId, nodeId) => ({ processId: 'Process', instanceId, nodeId });
-
-const machine = (performing, waiting) => ({
-  performer: token('Instance1', 'Machine'),
-  performing: performing || null,
-  waiting: waiting || []
-});
-
-const entryRequest = (instanceId, nodeId) => ({ type: 'entry', instanceId, nodeId });
+const MODEL = [ { performer: 'Machine', activities: [ 'Task' ] } ];
 
 const KEY = 'Instance1|Machine';
 
-function setup() {
+const token = (label) => ({ label, node: 'Task' });
+
+function setup(state = 'playing') {
   const eventBus = createEventBus(),
         decided = [],
         changes = [];
 
-  const sequences = new Sequences(eventBus);
+  const transport = { getState: () => transport.state, state };
+  const injector = { get: (name) => (name === 'playback' ? transport : null) };
+
+  const sequences = new Sequences(eventBus, injector);
+
+  sequences.setModel(MODEL);
 
   eventBus.on('manual.decide', (payload) => decided.push(payload));
   eventBus.on('sequences.changed', () => changes.push(true));
 
-  const report = (performers, decisions) =>
-    eventBus.fire('manual.decisions', { performers, decisions: decisions || [] });
-
-  return { eventBus, sequences, decided, changes, report };
+  return { eventBus, sequences, decided, changes, transport };
 }
 
-test('a report is applied and announced', () => {
-  const { sequences, changes, report } = setup();
+test('what the player writes is announced', () => {
+  const { sequences, changes } = setup();
 
-  report([ machine(null, [ token('Job1', 'Task') ]) ]);
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
 
   assert.deepEqual(sequences.get(KEY).order, [ DIVIDER, 'Job1|Task' ]);
-  assert.equal(changes.length, 1);
+  assert.equal(changes.length, 2);
 });
 
-test('nothing is enqueued while every token stands below the divider', () => {
-  const { decided, report } = setup();
+test('nothing is offered while every token stands below the divider', () => {
+  const { sequences, decided } = setup();
 
-  report(
-    [ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ],
-    [ entryRequest('Job1', 'Task'), entryRequest('Job2', 'Task') ]
-  );
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
+  sequences.queue(KEY, token('Job2'));
 
   assert.deepEqual(decided, []);
 });
 
-test('the first token above the divider is enqueued where its performer is idle and asking', () => {
-  const { sequences, decided, report } = setup();
+test('an order set while a performer conducts nothing is offered at once', () => {
+  const { sequences, decided } = setup();
 
-  report(
-    [ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ],
-    [ entryRequest('Job1', 'Task'), entryRequest('Job2', 'Task') ]
-  );
-
-  sequences.setOrder(KEY, [ 'Job2|Task', 'Job1|Task', DIVIDER ]);
-
-  report(
-    [ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ],
-    [ entryRequest('Job1', 'Task'), entryRequest('Job2', 'Task') ]
-  );
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
+  sequences.queue(KEY, token('Job2'));
+  sequences.setOrder(KEY, [ 'Job2|Task', DIVIDER, 'Job1|Task' ]);
 
   assert.deepEqual(decided, [ {
     event: 'entry',
     payload: { instanceId: 'Job2', nodeId: 'Task' }
   } ]);
-
-  assert.equal(sequences.get(KEY).fixed, 'Job2|Task', 'and is marked as given to the engine');
 });
 
-test('a token the engine is not asking for is not enqueued, whatever the order says', () => {
-  const { decided, report } = setup();
+test('what is offered is settled: it goes to the front and stays there', () => {
+  const { sequences, decided } = setup();
 
-  report([ machine(null, [ token('Job1', 'Task') ]) ], []);
-  report([ machine(null, [ token('Job1', 'Task') ]) ], []);
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
+  sequences.queue(KEY, token('Job2'));
+  sequences.setOrder(KEY, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
 
+  assert.deepEqual(decided, [ { event: 'entry', payload: { instanceId: 'Job1', nodeId: 'Task' } } ]);
+  assert.equal(sequences.isCommitted(KEY, 'Job1|Task'), true);
+
+  // the reader changes their mind, but a decision given cannot be taken back
+  sequences.setOrder(KEY, [ 'Job2|Task', 'Job1|Task', DIVIDER ]);
+
+  assert.deepEqual(sequences.get(KEY).order, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
+});
+
+test('a performer that is conducting is offered nothing', () => {
+  const { sequences, decided } = setup();
+
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
+  sequences.queue(KEY, token('Job2'));
+  sequences.setOrder(KEY, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
+  decided.length = 0;
+
+  sequences.conduct(KEY, token('Job1'));
+
+  assert.deepEqual(decided, [], 'what it takes next is decided when it is seen to be released');
+});
+
+test('the token beneath is offered once the one conducted is seen to leave', () => {
+  const { sequences, decided } = setup();
+
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
+  sequences.queue(KEY, token('Job2'));
+  sequences.setOrder(KEY, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
+  sequences.conduct(KEY, token('Job1'));
+  decided.length = 0;
+
+  sequences.archive(KEY, token('Job1'));
+
+  assert.deepEqual(decided, [ {
+    event: 'entry',
+    payload: { instanceId: 'Job2', nodeId: 'Task' }
+  } ]);
+});
+
+test('an archived row is a record: forgetting one announces the change and offers nothing', () => {
+  const { sequences, decided, changes } = setup();
+
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
+  sequences.setOrder(KEY, [ 'Job1|Task', DIVIDER ]);
+  sequences.conduct(KEY, token('Job1'));
+  sequences.archive(KEY, token('Job1'));
+
+  const before = changes.length;
+
+  decided.length = 0;
+  sequences.forget(KEY, 'Job1|Task');
+
+  assert.equal(changes.length, before + 1);
   assert.deepEqual(decided, []);
+  assert.deepEqual(sequences.get(KEY).order, [ DIVIDER ]);
 });
 
-test('a performer that is conducting is asked for nothing', () => {
-  const { sequences, decided, report } = setup();
+test('a token joining below the divider offers nothing of its own', () => {
+  const { sequences, decided } = setup();
 
-  report([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
-  sequences.setOrder(KEY, [ 'Job2|Task', DIVIDER, 'Job1|Task' ]);
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
+  sequences.setOrder(KEY, [ 'Job1|Task', DIVIDER ]);
+  decided.length = 0;
 
-  report(
-    [ machine(token('Job1', 'Task'), [ token('Job2', 'Task') ]) ],
-    [ entryRequest('Job2', 'Task') ]
-  );
+  sequences.queue(KEY, token('Job2'));
 
-  assert.deepEqual(decided, [], 'the performer is busy, whatever a stale request may say');
+  assert.deepEqual(decided, [ {
+    event: 'entry',
+    payload: { instanceId: 'Job1', nodeId: 'Task' }
+  } ], 'the one above the divider is offered again, the one below it is not');
 });
 
-test('a decision that did not take effect is given again, the report saying so by repeating itself', () => {
-  const { sequences, decided, report } = setup();
+test('a paused run is offered nothing, and what became offerable is offered when it plays', () => {
+  const { eventBus, sequences, decided, transport } = setup('paused');
 
-  report([ machine(null, [ token('Job1', 'Task') ]) ]);
+  sequences.open('Instance1', 'Machine');
+  sequences.queue(KEY, token('Job1'));
   sequences.setOrder(KEY, [ 'Job1|Task', DIVIDER ]);
 
-  // enqueuing resumes the engine, so a second report showing the performer idle and the token asked for is
-  // a report that the first decision was void
-  report([ machine(null, [ token('Job1', 'Task') ]) ], [ entryRequest('Job1', 'Task') ]);
-  report([ machine(null, [ token('Job1', 'Task') ]) ], [ entryRequest('Job1', 'Task') ]);
+  assert.deepEqual(decided, [], 'a paused run advances nothing');
+  assert.equal(sequences.isCommitted(KEY, 'Job1|Task'), false, 'and nothing is settled');
 
-  assert.equal(decided.length, 2);
-  assert.equal(sequences.get(KEY).pinned, 'Job1|Task', 'and stands with the engine again');
-});
+  transport.state = 'playing';
+  eventBus.fire('playback.changed', { state: 'playing' });
 
-test('a token that left and came back is a token the reader has not placed', () => {
-  const { sequences, decided, report } = setup();
-
-  report([ machine(null, [ token('Job1', 'Task') ]) ]);
-  sequences.setOrder(KEY, [ 'Job1|Task', DIVIDER ]);
-  report([ machine(null, [ token('Job1', 'Task') ]) ], [ entryRequest('Job1', 'Task') ]);
-
-  report([ machine(null, []) ], []);
-  report([ machine(null, [ token('Job1', 'Task') ]) ], [ entryRequest('Job1', 'Task') ]);
-
-  assert.equal(decided.length, 1, 'it is appended below the divider, and nothing below it is advanced');
-  assert.deepEqual(sequences.get(KEY).order, [ DIVIDER, 'Job1|Task' ]);
+  assert.deepEqual(decided, [ { event: 'entry', payload: { instanceId: 'Job1', nodeId: 'Task' } } ]);
 });
 
 test('the performers go when the tokens go', () => {
-  const { eventBus, sequences, changes, report } = setup();
+  const { eventBus, sequences, changes } = setup();
 
-  report([ machine(null, [ token('Job1', 'Task') ]) ]);
+  sequences.open('Instance1', 'Machine');
   eventBus.fire('tokens.cleared', {});
 
   assert.deepEqual(sequences.all(), []);
-  assert.equal(changes.length, 2, 'the clearing is announced as the report was');
+  assert.equal(changes.length, 2, 'the clearing is announced as the opening was');
 });

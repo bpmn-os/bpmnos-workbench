@@ -23,16 +23,16 @@ const GREEDY = [
   'FirstEnumeratedChoice', 'CompetingCandidates', 'EnqueuedEvents', 'TimeWarp'
 ];
 
-// The user advances time and decides which message is delivered to whom; the rest still settles itself.
-// `SequentialEntries` stands where `CompetingCandidates` did, settling the entry of a child of a sequential
-// ad hoc subprocess but not the ambiguous delivery, which is now the user's — the two were decided together
-// while neither had anywhere to be decided. `InstantDirectMessage` stays, an addressed delivery being no
-// decision. Each dispatcher leaves this list as its panel arrives.
+// The user advances time, decides which message is delivered to whom, and orders what each sequential
+// performer takes on next; the rest still settles itself. `SequentialEntries` has left this list, the
+// Sequences tab now answering the entry of a child of a sequential ad hoc subprocess from the order it
+// holds. `InstantDirectMessage` stays, an addressed delivery being no decision. Each dispatcher leaves
+// this list as its panel arrives.
 //
 // There is no clock among them, which is what makes the run manual: the engine advances only as far as it
 // can and then stands still until the page enqueues a tick.
 const INTERACTIVE = [
-  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'SequentialEntries', 'EnqueuedEvents'
+  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'EnqueuedEvents'
 ];
 
 const ready = createBPMNOS();
@@ -59,30 +59,14 @@ function endSession() {
   session = null;
 }
 
-/**
- * What the engine is waiting for, as the controller has it: every decision left to the caller, and, for a
- * message delivery, the messages that token may receive, each named by the origin and the sender that
- * identify it. Only the engine can answer this, and only while it stands where it stands, so it is read
- * here at each step rather than asked for later.
- */
-function decisions() {
-  return JSON.parse(session.controller.getPendingDecisions()).map((decision) => {
-    if (decision.type !== 'messageDelivery') {
-      return decision;
-    }
-    const candidates = JSON.parse(session.controller.getMessageCandidates(decision.instanceId, decision.nodeId));
-    return { ...decision, candidates: candidates.map(({ origin, sender }) => ({ origin, sender })) };
-  });
-}
-
-// What the page is told after every step: the records the engine produced, what it is waiting for, whether
-// it is still running, and where its clock stands.
+// What the page is told after every step: the records the engine produced, whether it is still running,
+// and where its clock stands. What a run does reaches the page as records and as nothing else: the engine's
+// present is far ahead of the diagram, so a page that drew from it would show what it has not yet played.
 function report() {
   const entries = session.entries.splice(0); // in place: the monitor's observer holds this array
   self.postMessage({
     type: 'step',
     entries,
-    decisions: decisions(),
     alive: session.engine.isAlive(),
     time: session.engine.getCurrentTime(),
     objective: session.engine.getWeightedObjective()
@@ -107,6 +91,18 @@ self.onmessage = async (event) => {
       const required = JSON.parse(probe.getLookupTableNames());
       probe.delete();
       self.postMessage({ type: 'lookups', required });
+      return;
+    }
+
+    if (message.type === 'describe') {
+      // What the model resolves, which the records cannot say: which nodes perform sequentially and which
+      // activities each performs. It is asked of the model rather than of a run, so it is the same answer
+      // before a run, during one and while a recorded log is replayed. A model referencing lookup tables
+      // cannot be built without their content, so this is asked once the tables are in.
+      self.postMessage({
+        type: 'described',
+        described: JSON.parse(Module.describeModel(JSON.stringify({ model: modelXml, lookupTables })))
+      });
       return;
     }
 

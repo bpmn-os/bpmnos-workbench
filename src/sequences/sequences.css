@@ -28,6 +28,17 @@
   opacity: 0.55;
 }
 
+/* the offer to forget an archived row: the side panel's own control shape, and the size the message tab's
+   offer to deliver uses, so a control reads the same wherever a row carries one */
+.wb-forget svg {
+  width: 12px;
+  height: 12px;
+}
+
+.wb-forget:hover {
+  color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
 /* The divider reads as a statement rather than as an entry: the muted type of a list title, so that it
    separates the rows without competing with them. It is given the height of the reorder strip, which is the
    height every other row of the list has, so that its words sit on the midpoint between the arrows beside

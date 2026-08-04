@@ -2,6 +2,24 @@ import MessageStore from './Store.js';
 import MessagesPanel from './Panel.js';
 
 /**
+ * Whether a message is one the waiting token accepts, matched as the engine matches it: the message was
+ * sent by a node the token accepts, its header holds the keys the token expects, and where both sides state
+ * a value the values are equal. An unset value on either side matches anything, which is how a message
+ * addressed to no one in particular reaches whoever waits for it.
+ */
+function accepts(criterion, message) {
+  const expected = criterion.recipientHeader || {},
+        header = message.header || {};
+
+  return (criterion.senders || []).includes(message.origin)
+    && Object.keys(expected).length === Object.keys(header).length
+    && Object.entries(expected).every(([ key, value ]) =>
+      value === null || value === undefined
+        || header[key] === null || header[key] === undefined
+        || String(header[key]) === String(value));
+}
+
+/**
  * Messages — what a run has sent and not yet disposed of, as a diagram-js service.
  *
  * The store itself is plain and knows nothing of a diagram. Two things tie it to a running one, and both
@@ -18,33 +36,70 @@ export class Messages extends MessageStore {
     super();
 
     this._eventBus = eventBus;
-    this._recipients = new Map(); // message key -> the tokens that may receive it
+    this._waiting = new Map(); // token key -> what that token accepts, as its request stated it
 
     // The braces matter: a listener returning a value is a listener that has answered the event, and
     // diagram-js stops the event there. Returning whether anything was held would keep `diagram.clear`
     // from reaching the canvas, which then keeps a root that carries no DI.
     eventBus.on([ 'tokens.cleared', 'diagram.clear' ], () => {
+      this._waiting.clear();
       this.clear();
     });
 
-    // What a run is waiting for, as the engine reports it: a message delivery request names the token that
-    // waits and the messages it may receive, which read here as the tokens that may receive each message.
-    // Only an engine standing at the step can say this, so it is held while it is true and dropped with the
-    // run, and it is not part of the store itself, which holds what was sent rather than what may happen.
-    eventBus.on('manual.decisions', ({ decisions }) => {
-      this._recipients = invert(decisions);
-      this._eventBus.fire('messages.changed', {});
-    });
   }
 
   /**
-   * The tokens that may receive the message, as the engine last reported them.
+   * A token has begun waiting for a message, and the record says what it accepts.
+   *
+   * @param {Object} record  the message delivery request, as the engine reported it
+   */
+  awaiting(record) {
+    this._waiting.set(`${record.instanceId}|${record.nodeId}`, {
+      instanceId: record.instanceId,
+      nodeId: record.nodeId,
+      senders: record.senders || [],
+      recipientHeader: record.recipientHeader || {}
+    });
+
+    this._eventBus.fire('messages.changed', {});
+  }
+
+  /**
+   * A token has stopped waiting, which is what any record of it past that waiting says: it received what it
+   * waited for, or it failed, or it was withdrawn. Nothing announces the withdrawal of the request itself,
+   * so this is read from the token's own record, and without it a token long gone would go on being offered
+   * every message that matched what it once accepted.
+   *
+   * @param {string} instanceId  the instance the token belongs to
+   * @param {string} nodeId      the node it stands at
+   */
+  settled(instanceId, nodeId) {
+    if (!this._waiting.delete(`${instanceId}|${nodeId}`)) {
+      return false;
+    }
+
+    this._eventBus.fire('messages.changed', {});
+
+    return true;
+  }
+
+  /**
+   * The tokens that may receive the message: those waiting for one whose criterion it answers. Both sides
+   * of the relation come from the records the run produced, so it holds what the diagram holds.
    *
    * @param {string} key  the message's key in the store
    * @returns {Array<{instanceId: string, nodeId: string}>}
    */
   recipients(key) {
-    return this._recipients.get(key) || [];
+    const message = this.get(key);
+
+    if (!message) {
+      return [];
+    }
+
+    return [ ...this._waiting.values() ]
+      .filter((criterion) => accepts(criterion, message))
+      .map(({ instanceId, nodeId }) => ({ instanceId, nodeId }));
   }
 
   apply(record, color) {
@@ -67,34 +122,6 @@ export class Messages extends MessageStore {
 }
 
 Messages.$inject = [ 'eventBus' ];
-
-/**
- * Reads the pending decisions the other way round: the engine says which messages a waiting token may
- * receive, and a panel showing messages needs which tokens may receive each message. A message is named
- * there by its origin and its sender, which is the key the store holds it under.
- *
- * @param {Array} decisions  what the engine is waiting for
- * @returns {Map<string, Array<{instanceId: string, nodeId: string}>>}
- */
-function invert(decisions) {
-  const recipients = new Map();
-
-  (decisions || []).forEach(({ type, instanceId, nodeId, candidates }) => {
-    if (type !== 'messageDelivery') {
-      return;
-    }
-    (candidates || []).forEach(({ origin, sender }) => {
-      const key = `${origin}|${sender}`;
-
-      if (!recipients.has(key)) {
-        recipients.set(key, []);
-      }
-      recipients.get(key).push({ instanceId, nodeId });
-    });
-  });
-
-  return recipients;
-}
 
 /**
  * The messages module: the store and the tab that shows it.

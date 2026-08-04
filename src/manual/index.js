@@ -32,7 +32,6 @@ export default function createManual(modeler, clock) {
   let running = false;      // a run has begun and has not been ended
   let stalled = false;      // the engine is alive and can fetch no event: it waits for the user
   let drained = false;      // the diagram shows everything the engine has produced so far
-  let pending = [];         // what the engine is waiting for, as the controller last reported it
   let decided = [];         // what the user has decided and the engine has not yet been given
   let deciding = false;     // a decision is with the engine; the rest of `decided` follows it
 
@@ -75,6 +74,8 @@ export default function createManual(modeler, clock) {
       runner.setLookup(name, csv);
     }
 
+    await describe();
+
     running = true;
     stalled = false;
     drained = false;
@@ -90,6 +91,26 @@ export default function createManual(modeler, clock) {
     return playback.getLog();
   }
 
+  // What the model resolves rather than what a run does: which nodes perform sequentially and which
+  // activities each performs. No record says it, and it is the same for every run of the model, so it is
+  // asked once a run is about to start, which is when the lookup tables a model references are in and it
+  // can be built. A panel that reads it holds it; a host without one is told nothing.
+  async function describe() {
+    const sequences = modeler.get('sequences', false);
+
+    if (!sequences) {
+      return;
+    }
+
+    try {
+      const described = await runner.describe();
+
+      sequences.setModel(described.sequentialPerformers || []);
+    } catch (err) {
+      console.error('[manual] the model could not be described:', err);
+    }
+  }
+
   // The engine has run itself out. What it produced last is still being played, so the stream is closed
   // rather than stopped: the player finishes what it holds and ends by itself, and the diagram shows the
   // whole run rather than as much of it as had been drawn when the engine finished.
@@ -101,7 +122,6 @@ export default function createManual(modeler, clock) {
     stalled = false;
     clock.setWaiting(false);
     decided = [];
-    announce([]);
     playback.endStream();
     await release();
   }
@@ -116,7 +136,6 @@ export default function createManual(modeler, clock) {
     stalled = false;
     clock.setWaiting(false);
     decided = [];
-    announce([]);
     playback.endStream();
     await playback.stop();
     await release();
@@ -141,21 +160,11 @@ export default function createManual(modeler, clock) {
     drained = false;
     playback.push(step.entries);
 
-    // What the engine is waiting for is announced as it changes, so whichever panel offers a decision reads
-    // it from one place. It is the engine's own answer, not a reading of the diagram, which is why it can be
-    // offered while the animation is still catching up.
-    announce(step.decisions || []);
-
     if (step.alive) {
       stalled = true;
     } else {
       finish();
     }
-  }
-
-  function announce(decisions) {
-    pending = decisions;
-    eventBus.fire('manual.decisions', { decisions });
   }
 
   function sayWaiting() {

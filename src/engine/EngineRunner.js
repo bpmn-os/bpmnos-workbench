@@ -14,9 +14,10 @@
  *   enqueue(event, payload)  → Promise<Step>    queue what the user decided, then let it advance again
  *   stop()                   → Promise<void>    end the run and free the engine
  *
- * where Step is `{ entries, decisions, alive, time, objective }`. The decisions are what the engine is
- * waiting for — `{ type, instanceId, nodeId }`, and for a message delivery the `candidates` it may receive,
- * each `{ origin, sender }` — since only the engine, standing where it stands, can say.
+ * where Step is `{ entries, alive, time, objective }`. The entries are the records the engine produced,
+ * and they are all a page learns of what a run does: the engine's present runs far ahead of the diagram,
+ * so what the page shows follows the records it has drawn rather than the state the engine is in. What the
+ * model resolves rather than what a run does is asked once, through `describe`.
  */
 export default class EngineRunner {
   constructor() {
@@ -32,6 +33,16 @@ export default class EngineRunner {
 
   setLookup(name, csv) {
     this._worker.postMessage({ type: 'lookup', name, csv });
+  }
+
+  /**
+   * What the model resolves, which no record says: the sequential performers and the activities each
+   * performs. It is asked of the model rather than of a run, so it holds before a run, during one and
+   * while a recorded log is replayed, and it is asked once the lookup tables are in, a model referencing
+   * them being unbuildable without their content.
+   */
+  describe() {
+    return this._request('described', { type: 'describe' });
   }
 
   run(instances, seed) {
@@ -78,6 +89,11 @@ export default class EngineRunner {
       this._fail(new Error(msg.error));
       return;
     }
+    if (msg.type === 'described' && this._pending && this._pending.kind === 'described') {
+      const p = this._pending; this._pending = null; p.resolve(msg.described);
+      return;
+    }
+
     if (msg.type === 'lookups' && this._pending && this._pending.kind === 'loadModel') {
       const p = this._pending; this._pending = null; p.resolve(msg.required);
       return;

@@ -12,6 +12,26 @@ wasm module** to play back and simulate real BPMN-OS processes. The cross-repo i
 own `jsonify` stream; the animation translation is internal to the workbench (both CLAUDE.mds fix this
 boundary).
 
+## Status (2026-08-04): the panels a run concerns follow the stream
+
+The "Sequences" tab is built, and building it settled how every panel of this application learns what a run
+does. The workbench does not read the engine, it replays it: the worker pushes the records the monitor
+produces into `EngineLogPlayer`, which draws each token and, in the same pass, writes it into the execution
+state, the messages and the sequences stores. A store written that way cannot run ahead of the canvas,
+because the record that would advance it has not been read yet.
+
+What a run does therefore reaches the page as records and as nothing else. The worker's step carries the
+records, whether the engine is alive, the time and the objective; `manual.decisions` and the pending
+decisions it announced are gone. Two things no record says are asked of the bridge instead: what the model
+resolves, through `describeModel`, which reports the sequential performers and the activities each performs;
+and what a token waiting for a message accepts, which a `messageDeliveryRequest` record now carries, since
+the messages that match it change with every message created while the request stands.
+
+The Sequences tab shows, per performer, what it has done, what it is doing and what it may take next, in an
+order the reader sets, and the first token above its divider is offered whenever a performer is idle and the
+transport plays. A token that has left is archived where it stood, frozen with the values it held, and may
+be forgotten a row at a time; whether the record is kept at all is one toggle.
+
 ## Status (2026-07-29): what a token holds
 
 R2 is being built, as the sprint recorded in `~/Code/bpmnos/Next sprint.md`. The workbench now keeps the

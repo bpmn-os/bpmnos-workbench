@@ -65,9 +65,15 @@ Key source (this repo):
 - `src/playback/EngineLogPlayer.js` — registered as the **`playback`** service (overriding
   bpmn-js-animation's packaged `Playback`), so the **TokenPanel** drives it via the same
   `play(log)`/`pause`/`resume`/`stop`/`getState` + `playback.changed` interface. `play(log)` reads the
-  engine's `{token|event|message}` stream and drives the `animation` service **directly** — it does NOT
-  translate to the library's 5-action execution log. Per-state → animation-call mapping (R1 positions,
-  `pulse` in playback).
+  engine's `{token|event|message|messageDeliveryRequest}` stream and drives the `animation` service
+  **directly** — it does NOT translate to the library's 5-action execution log. Per-state → animation-call
+  mapping (R1 positions, `pulse` in playback).
+
+  It is also the only writer of every store a run fills — the execution state, the messages and the
+  sequences — and it writes each record as it draws it. That is what keeps a panel from running ahead of
+  the canvas, and it is why a panel must never read the engine's present: a run's records arrive long
+  before they are played, so anything derived from a query about the engine would show what the diagram
+  has not yet shown.
 - `src/playback/index.js` — `EnginePlaybackModule` (`playback: EngineLogPlayer`; list AFTER
   `TokenPanelModule` in `additionalModules` so the override wins). Depends on `AnimationModule`.
 - `src/messages/` — the messages a run has sent and not yet disposed of: `Store.js` (plain, keyed by the
@@ -80,23 +86,49 @@ Key source (this repo):
 
   A message a run can still deliver ends in the tokens that may receive it, under "Tokens", each with the
   offer to deliver it there: a paper plane until the delivery is asked for, an hourglass until the record
-  reporting it arrives and takes the message from the list. Which tokens those are is the engine's answer,
-  read from `manual.decisions` and held beside the store as a relation rather than in it; the heading's
-  filter selects on that same relation, so "selected tokens" narrows both which messages are listed and
-  which of a message's tokens are shown under it.
+  reporting it arrives and takes the message from the list. Which tokens those are is derived rather than
+  asked for: a `messageDeliveryRequest` record says which senders that token accepts and which header it
+  expects, the store keeps that criterion, and a message matches it where its origin is among the senders
+  and the values stated on both sides agree. Both sides therefore come from records, so the relation holds
+  what the diagram holds. The heading's filter selects on that same relation, so "selected tokens" narrows
+  both which messages are listed and which of a message's tokens are shown under it.
 - `src/sequences/` — the sequential performers of a run and the order each works through: `Store.js` (plain,
-  node-testable, holding per performer the reader's order as one list of keys with the divider among them,
-  the token being conducted, and the token given to the engine), `index.js` (the `sequences` service, which
-  reads the performers from the `manual.decisions` announcement and answers by enqueuing the first token
-  above the divider whenever a report shows an idle performer asking for one), `Panel.js` (the "Sequences"
-  tab, one `createOrderedListEntry` per performer holding the fixed entry, the waiting tokens and the
-  divider), `PerformerEntry.js` (the performer drawn as `bpmn-font`'s participant, collapsed sub-process or
-  ad hoc sub-process, marked with its token) and `sequences.css`.
-  Answering every report that shows an idle performer asking is the whole of what a void decision needs:
-  enqueuing resumes the engine, so a report repeating itself is a report that the last decision did not take
-  effect. The pin on a token given to the engine is therefore a mark, not a guard.
+  node-testable, holding what the model resolved and, per performer, the reader's order as one list of keys
+  with the divider among them and the token being conducted), `index.js` (the `sequences` service,
+  announcing `sequences.changed` and offering the first token above a divider through `manual.decide`),
+  `Panel.js` (the "Sequences" tab, one `createOrderedListEntry` per performer holding the conducted token as
+  its anchor, the waiting tokens and the divider), `PerformerEntry.js` (the performer drawn as `bpmn-font`'s
+  participant, collapsed sub-process or ad hoc sub-process, marked with its token) and `sequences.css`.
+
+  The store is written by the player, as the execution state and the messages are, so it shows what the
+  canvas shows: a performer is opened when the token at a performing node is drawn `BUSY` and closed on
+  `COMPLETED`, and a token at one of its activities queues on `READY`, is conducted from `ENTERED`, and is
+  archived when it exits. Which activities belong to which performer is what the model resolves, asked of
+  `describeModel` once a run begins; which token performs for a given activity token is the climb from it to
+  the token standing at the performer node, through the animation's own parentage. Nothing decodes an
+  identifier and nothing reads the engine's present, which runs far ahead of the diagram.
+
+  A token waiting is where the reader put it. What is offered moves once, to the front of what is still to
+  come, and is anchored there, a decision given being one that cannot be taken back; it is greyed when it is
+  conducted and stays greyed, archived, once it has left, so the list reads as the order the performer
+  worked in. The store holds that invariant itself rather than relying on the panel's arrows. An order is
+  offered whenever the store changes or the reader reorders, and only while the transport plays, a paused
+  run advancing nothing; an offer the engine has moved past expires and is dropped and is made again when
+  the diagram reaches the state that makes it answerable.
+
+  An archived row is frozen: it carries the values the token held as it left, since the execution state
+  forgets a token that is gone, and it offers the one control a row of this panel carries, forgetting it. A
+  waiting row offers none, the engine queueing a token once and never again, so a row thrown away would be a
+  token that could never be performed. "Keep archived tokens", the bar the Tokens tab gives auto-focus,
+  governs the keeping rather than the showing: turning it off forgets what is held, and turning it on begins
+  the record afresh. The heading's filter lists a performer for its own token, a token of its list, and a
+  token standing at an ad hoc sub-process it performs for, and for nothing else in the same process.
 - `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
   since radios of one name are one group and two tabs are alive at once.
+- `src/animation-tokens.js` — the seam between the identities this application speaks and the tokens the
+  animation holds. A node is always a process rather than the pool drawn for it, and the animation reports
+  that pool, so the two are translated here and nowhere else: the process a node stands for, and the
+  animation's token for an identity.
 - `demo/panels.html` — the tabs a run concerns over stores fed by hand: no model, no mode, no console, and
   nothing of it under `src/`. It is where a panel is designed and reviewed before it is wired to a run.
 - `src/token-rows/` — the `tokenRows` service: a token drawn as the Tokens tab draws it, wherever a panel
@@ -113,7 +145,10 @@ Key source (this repo):
   from `saveXML`.
 - `src/engine/` — the wasm engine and nothing about who drives it: `engine-worker.js` (the Web Worker that
   assembles an `Input` and runs the engine, `Engine.run` being a blocking call) and `EngineRunner.js` (the
-  promise-based wrapper the page holds, one request in flight at a time).
+  promise-based wrapper the page holds, one request in flight at a time). A step reports the records the
+  engine produced, whether it is alive, the time and the objective, and nothing of the engine's present;
+  `describe` answers what the model resolves, which no record says and which is the same for every run of
+  that model.
 - `src/input/` — what a run is given: the "Input" entry holding the instance table and one table per lookup
   the model references, each editable in place. It hands its element back rather than mounting it, so the
   same provider serves any source and any place it is shown.

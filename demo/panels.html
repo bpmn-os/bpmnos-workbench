@@ -63,9 +63,9 @@
     <p class="hint">
       Both tabs over stores fed with a hardcoded report rather than with a run, side by side because they
       are built from the same classes and must look it. The first performer is an ad hoc sub-process, idle,
-      with three tokens waiting; the second is a sub-process conducting one, which stands at the head of its
-      list as a fixed entry and carries no arrows; the third is a process standing idle with nothing under
-      it. Move a row with ▲ and ▼ and watch the order above: that is what a later report is read against.
+      with three tokens, the first of them performed and kept as a greyed record carrying the offer to forget
+      it; the second is a sub-process conducting one, greyed where it stands and carrying no arrows; the
+      third is a process standing idle with nothing under it. Move a row with ▲ and ▼ and watch the order above: that is what a later report is read against.
       Nothing passes the fixed entry, and the divider is a row of the list like any other, so moving it is
       the same act as moving a token past it. Tick a token to select it and the filter of either heading
       narrows to what that selection concerns.
@@ -81,44 +81,45 @@
     import MessagesPanel from '/src/messages/Panel.js';
     import { TokenRows } from '/src/token-rows/index.js';
 
-    // What a run would report, hardcoded: the performers of AdHocSubProcess.bpmn, one idle, one conducting,
-    // one empty, with the entry requests the engine would have pending for the tokens that wait.
-    const REPORT = {
-      performers: [
-        {
-          performer: { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'AdHocSubProcess_1' },
-          performing: null,
-          waiting: [
-            { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'Activity_1' },
-            { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'Activity_2' },
-            { processId: 'Process_1', instanceId: 'Instance_1', nodeId: 'Activity_3' }
-          ]
-        },
-        {
-          performer: { processId: 'Process_1', instanceId: 'Instance_2', nodeId: 'SubProcess_1' },
-          performing: { processId: 'Process_1', instanceId: 'Instance_2', nodeId: 'Activity_1' },
-          waiting: [
-            { processId: 'Process_1', instanceId: 'Instance_2', nodeId: 'Activity_2' }
-          ]
-        },
-        {
-          performer: { processId: 'Process_1', instanceId: 'Instance_3' },
-          performing: null,
-          waiting: []
-        }
-      ],
-      decisions: [
-        { type: 'entry', instanceId: 'Instance_1', nodeId: 'Activity_1' },
-        { type: 'entry', instanceId: 'Instance_1', nodeId: 'Activity_2' },
-        { type: 'entry', instanceId: 'Instance_1', nodeId: 'Activity_3' },
-        { type: 'entry', instanceId: 'Instance_2', nodeId: 'Activity_2' },
-        {
-          type: 'messageDelivery',
-          instanceId: 'Instance_2',
-          nodeId: 'Activity_2',
-          candidates: [ { origin: 'RequestTask', sender: 'Instance_1' } ]
-        }
-      ]
+    // What a run produces, hardcoded: the model's own resolution, and the records a player would replay
+    // one at a time. The stores are written exactly as the player writes them, so the page shows what a run
+    // would show at that point and nothing that runs ahead of it.
+    const MODEL = [
+      { performer: 'AdHocSubProcess_1', activities: [ 'Activity_1', 'Activity_2', 'Activity_3' ] },
+      { performer: 'SubProcess_1', activities: [ 'Activity_1', 'Activity_2' ] },
+      { performer: 'Process_1', activities: [] }
+    ];
+
+    // a performer, three tokens queued under it; a second performer conducting one of its own; a third
+    // standing at a process with nothing under it yet
+    const RUN = [
+      [ 'open', 'Instance_1', 'AdHocSubProcess_1' ],
+      [ 'queue', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_1' ],
+      [ 'queue', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_2' ],
+      [ 'queue', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_3' ],
+      [ 'open', 'Instance_2', 'SubProcess_1' ],
+      [ 'queue', 'Instance_2|SubProcess_1', 'Instance_2', 'Activity_1' ],
+      [ 'queue', 'Instance_2|SubProcess_1', 'Instance_2', 'Activity_2' ],
+      [ 'conduct', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_1' ],
+      [ 'archive', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_1' ],
+      [ 'conduct', 'Instance_2|SubProcess_1', 'Instance_2', 'Activity_1' ],
+      [ 'open', 'Instance_3', 'Process_1' ]
+    ];
+
+    // one message waiting, and the token that has begun waiting for one, as the request record states it
+    const MESSAGE = {
+      origin: 'RequestTask',
+      state: 'CREATED',
+      header: { name: 'Request', sender: 'Instance_1', recipient: null, machine: 'M1' },
+      content: { Duration: 7, Job: 'B' }
+    };
+
+    const DELIVERY_REQUEST = {
+      processId: 'Process_1',
+      instanceId: 'Instance_2',
+      nodeId: 'Activity_2',
+      senders: [ 'RequestTask' ],
+      recipientHeader: { name: 'Request', sender: null, recipient: null, machine: 'M1' }
     };
 
     // what an element registry would say of the nodes the performers stand at, which is what decides the
@@ -139,14 +140,12 @@
     // the tokens the animation would have drawn, which is where a row takes its colour and its state from
     const COLORS = { Instance_1: '#1a73e8', Instance_2: '#e8710a', Instance_3: '#188038' };
 
-    const TOKENS = REPORT.performers.flatMap((entry) =>
-      [ entry.performer, entry.performing, ...entry.waiting ].filter(Boolean).map((identity) => ({
-        label: identity.instanceId,
-        node: identity.nodeId,
-        color: COLORS[identity.instanceId],
-        state: 'READY',
-        selected: false
-      })));
+    const TOKENS = [
+      [ 'Instance_1', 'AdHocSubProcess_1' ], [ 'Instance_1', 'Activity_1' ],
+      [ 'Instance_1', 'Activity_2' ], [ 'Instance_1', 'Activity_3' ],
+      [ 'Instance_2', 'SubProcess_1' ], [ 'Instance_2', 'Activity_1' ], [ 'Instance_2', 'Activity_2' ],
+      [ 'Instance_3', 'Process_1' ]
+    ].map(([ label, node ]) => ({ label, node, color: COLORS[label], state: {}, selected: false }));
 
     // the services the panel asks for, each of them optional to it, so a stub is a stub and not a fake
     const eventBus = {
@@ -268,21 +267,26 @@
     new SequencesPanel(injector, eventBus, sequences, {});
     new MessagesPanel(injector, eventBus, messages, {});
 
-    // one message waiting, so that the two tabs can be read against each other: they are built from the
-    // same classes and must look it
-    messages.apply({
-      origin: 'RequestTask',
-      state: 'CREATED',
-      header: { name: 'Request', sender: 'Instance_1', recipient: null, machine: 'M1' },
-      content: { Duration: 7, Job: 'B' }
-    }, COLORS.Instance_1);
+    // written as the player writes them: the model's resolution first, then the records
+    sequences.setModel(MODEL);
+
+    RUN.forEach(([ what, ...args ]) => {
+      if (what === 'open') {
+        sequences.open(args[0], args[1]);
+      } else {
+        sequences[what](args[0], { label: args[1], node: args[2] });
+      }
+    });
+
+    messages.apply(MESSAGE, COLORS.Instance_1);
+    messages.awaiting(DELIVERY_REQUEST);
 
     const out = document.getElementById('out');
 
     const show = () => {
       out.textContent = sequences.all().map((held) =>
         held.key + '\n' + held.order.map((key) =>
-          (key === held.fixed ? '  = ' : '    ') + key).join('\n')).join('\n\n');
+          (key === held.conducting ? '  = ' : '    ') + key).join('\n')).join('\n\n');
     };
 
     eventBus.on('sequences.changed', show);
@@ -315,7 +319,8 @@
     });
 
     eventBus.fire('diagram.init', {});
-    eventBus.fire('manual.decisions', REPORT);
+    eventBus.fire('sequences.changed', {});
+    eventBus.fire('messages.changed', {});
     show();
 
     // the order is recorded as the reader sets it, so the readout follows every reorder

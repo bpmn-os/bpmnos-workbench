@@ -4,162 +4,192 @@ import assert from 'node:assert/strict';
 import SequenceStore, { DIVIDER } from '../src/sequences/Store.js';
 
 /**
- * What a performer holds is the engine's answer read against the order the reader has set. The reports here
- * are of the bridge's own shape, `[ { performer, performing, waiting } ]`, each entry an identity of the
- * keys `Token::jsonify` reports.
+ * What a performer holds is written from the records a run produces, as they are replayed: a performer is
+ * opened when the token standing at its node becomes busy, a token joins its list when it becomes ready, is
+ * conducted when it is entered, and is dropped when it leaves. What the model resolves — which activities
+ * belong to which performer — is given to the store and never changes.
  */
 
-const token = (instanceId, nodeId) => ({ processId: 'Process', instanceId, nodeId });
-
-const performer = (instanceId, nodeId, performing, waiting) => ({
-  performer: token(instanceId, nodeId),
-  performing: performing || null,
-  waiting: waiting || []
-});
-
-const machine = (performing, waiting) => performer('Instance1', 'Machine', performing, waiting);
-
-const keys = (store, key) => store.get(key).order;
+const MODEL = [ { performer: 'Machine', activities: [ 'Task', 'Other' ] } ];
 
 const KEY = 'Instance1|Machine';
 
-test('a performer begins as the divider alone, so nothing is advanced before the reader places it', () => {
-  const store = new SequenceStore();
+function machine() {
+  const store = new SequenceStore(MODEL);
 
-  store.apply([ machine(null, []) ]);
+  store.open('Instance1', 'Machine');
 
-  assert.deepEqual(keys(store, KEY), [ DIVIDER ]);
+  return store;
+}
+
+const token = (label, node = 'Task') => ({ label, node });
+
+test('the model says which node performs and which activities it performs', () => {
+  const store = new SequenceStore(MODEL);
+
+  assert.equal(store.performsSequentially('Machine'), true);
+  assert.equal(store.performsSequentially('Task'), false);
+  assert.equal(store.performerOf('Task'), 'Machine');
+  assert.equal(store.performerOf('Elsewhere'), undefined);
+});
+
+test('a performer is opened with the divider alone, so nothing is advanced before the reader places it', () => {
+  const store = machine();
+
+  assert.deepEqual(store.get(KEY).order, [ DIVIDER ]);
   assert.equal(store.next(KEY), null);
+  assert.equal(store.open('Instance1', 'Machine'), false, 'and is opened once');
 });
 
-test('the tokens reported are appended below the divider, in the order reported', () => {
-  const store = new SequenceStore();
+test('a token joining is appended below the divider', () => {
+  const store = machine();
 
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
 
-  assert.deepEqual(keys(store, KEY), [ DIVIDER, 'Job1|Task', 'Job2|Task' ]);
+  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job1|Task', 'Job2|Task' ]);
   assert.equal(store.next(KEY), null, 'nothing stands above the divider');
+  assert.equal(store.queue(KEY, token('Job1')), false, 'and joins once');
 });
 
-test('the order the reader sets is what a later report is read against', () => {
-  const store = new SequenceStore();
+test('the order the reader sets is what the next token to enter is read from', () => {
+  const store = machine();
 
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
   store.setOrder(KEY, [ 'Job2|Task', DIVIDER, 'Job1|Task' ]);
 
-  assert.deepEqual(store.next(KEY), token('Job2', 'Task'));
-
-  // a token still waiting keeps its place, and one not seen before lands at the end
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task'), token('Job3', 'Task') ]) ]);
-
-  assert.deepEqual(keys(store, KEY), [ 'Job2|Task', DIVIDER, 'Job1|Task', 'Job3|Task' ]);
+  assert.deepEqual(store.next(KEY), token('Job2'));
 });
 
-test('a token that has left the engine leaves the list', () => {
-  const store = new SequenceStore();
+test('a token taken on goes to the front of what is still to come', () => {
+  const store = machine();
 
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
-  store.apply([ machine(null, [ token('Job2', 'Task') ]) ]);
-
-  assert.deepEqual(keys(store, KEY), [ DIVIDER, 'Job2|Task' ]);
-});
-
-test('a token given to the engine stands at the head and takes no part in the order', () => {
-  const store = new SequenceStore();
-
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
-  store.setOrder(KEY, [ 'Job1|Task', DIVIDER, 'Job2|Task' ]);
-  store.pin(KEY, 'Job1|Task');
-
-  assert.equal(store.get(KEY).fixed, 'Job1|Task');
-  assert.deepEqual(keys(store, KEY), [ 'Job1|Task', DIVIDER, 'Job2|Task' ]);
-  assert.deepEqual(store.next(KEY), token('Job1', 'Task'), 'and is still what is to enter next');
-});
-
-test('the token being conducted is no candidate, the list beneath it being what is still to come', () => {
-  const store = new SequenceStore();
-
-  store.apply([ machine(token('Job1', 'Task'), [ token('Job2', 'Task') ]) ]);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
   store.setOrder(KEY, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
 
-  assert.deepEqual(store.next(KEY), token('Job2', 'Task'));
+  // the order is changed while the decision for Job1 is in flight, so Job2 stands above it when the record
+  // saying Job1 was taken arrives
+  store.setOrder(KEY, [ 'Job2|Task', 'Job1|Task', DIVIDER ]);
+  store.conduct(KEY, token('Job1'));
+
+  assert.deepEqual(store.get(KEY).order, [ 'Job1|Task', 'Job2|Task', DIVIDER ],
+    'what ran first is shown first');
 });
 
-test('the mark is spent once the engine answers, the same row now being conducted', () => {
-  const store = new SequenceStore();
+test('a token archived takes its place at the end of the record', () => {
+  const store = machine();
 
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
-  store.pin(KEY, 'Job1|Task');
-  store.apply([ machine(token('Job1', 'Task'), [ token('Job2', 'Task') ]) ]);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
+  store.setOrder(KEY, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
+  store.conduct(KEY, token('Job1'));
+  store.archive(KEY, token('Job1'));
 
-  const held = store.get(KEY);
+  // a token withdrawn while waiting never ran, so it goes behind what did rather than staying where it sat
+  store.archive(KEY, token('Job2'));
 
-  assert.equal(held.pinned, null);
-  assert.equal(held.conducting, 'Job1|Task');
-  assert.equal(held.fixed, 'Job1|Task');
-  assert.deepEqual(held.order, [ 'Job1|Task', DIVIDER, 'Job2|Task' ]);
+  assert.deepEqual(store.get(KEY).order, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
 });
 
-test('the mark is spent where its token is gone, and the row goes with it', () => {
-  const store = new SequenceStore();
+test('a token conducted keeps its place and is no candidate', () => {
+  const store = machine();
 
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
-  store.pin(KEY, 'Job1|Task');
-  store.apply([ machine(null, [ token('Job2', 'Task') ]) ]);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
+  store.setOrder(KEY, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
+  store.conduct(KEY, token('Job1'));
 
-  const held = store.get(KEY);
-
-  assert.equal(held.pinned, null);
-  assert.equal(held.fixed, null);
-  assert.deepEqual(held.order, [ DIVIDER, 'Job2|Task' ]);
+  assert.equal(store.get(KEY).conducting, 'Job1|Task');
+  assert.deepEqual(store.get(KEY).order, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
+  assert.deepEqual(store.next(KEY), token('Job2'), 'the one beneath it is what enters next');
 });
 
-test('a decision that is void leaves its token where it was, to be enqueued again', () => {
-  const store = new SequenceStore();
+test('a token that has left is archived where it stood, and passed over thereafter', () => {
+  const store = machine();
 
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
-  store.pin(KEY, 'Job1|Task');
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
+  store.setOrder(KEY, [ 'Job1|Task', 'Job2|Task', DIVIDER ]);
+  store.conduct(KEY, token('Job1'));
+  store.archive(KEY, token('Job1'));
 
-  // the performer is idle and the token still waits: the engine has not answered, or its answer was void
-  store.apply([ machine(null, [ token('Job1', 'Task'), token('Job2', 'Task') ]) ]);
-
-  assert.deepEqual(keys(store, KEY), [ 'Job1|Task', DIVIDER, 'Job2|Task' ]);
-  assert.equal(store.get(KEY).pinned, 'Job1|Task', 'still with the engine');
+  assert.equal(store.get(KEY).conducting, null);
+  assert.deepEqual(store.get(KEY).order, [ 'Job1|Task', 'Job2|Task', DIVIDER ], 'the record stays in place');
+  assert.equal(store.isArchived(KEY, 'Job1|Task'), true);
+  assert.deepEqual(store.next(KEY), token('Job2'), 'and what is done is no candidate');
+  assert.equal(store.archive(KEY, token('Job1')), false, 'and is archived once');
 });
 
-test('the performers are held in the order they were first reported', () => {
-  const store = new SequenceStore();
+test('an archived row may be forgotten, and a waiting one may not', () => {
+  const store = machine();
 
-  store.apply([ performer('Instance1', 'M1'), performer('Instance1', 'M2') ]);
-  store.apply([ performer('Instance1', 'M2'), performer('Instance1', 'M1') ]);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
+  store.conduct(KEY, token('Job1'));
+  store.archive(KEY, token('Job1'));
 
-  assert.deepEqual(store.all().map((held) => held.key), [ 'Instance1|M1', 'Instance1|M2' ]);
+  assert.equal(store.forget(KEY, 'Job2|Task'), false, 'a token still waiting is the engine\'s, not the view\'s');
+  assert.equal(store.forget(KEY, 'Job1|Task'), true);
+  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ]);
 });
 
-test('a performer no longer reported is no longer held', () => {
-  const store = new SequenceStore();
+test('where the archive is not kept, a token that leaves is forgotten as it leaves', () => {
+  const store = machine();
 
-  store.apply([ performer('Instance1', 'M1'), performer('Instance1', 'M2') ]);
-  store.apply([ performer('Instance1', 'M2') ]);
+  store.keepArchived(false);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
+  store.conduct(KEY, token('Job1'));
+  store.archive(KEY, token('Job1'));
 
-  assert.deepEqual(store.all().map((held) => held.key), [ 'Instance1|M2' ]);
+  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ]);
 });
 
-test('a token standing at a process is told from one standing at a node', () => {
-  const store = new SequenceStore();
+test('turning the archive off forgets what is held, and turning it on keeps what comes', () => {
+  const store = machine();
 
-  store.apply([ performer('Instance1', undefined, null, [ token('Job1', 'Task') ]) ]);
+  store.queue(KEY, token('Job1'));
+  store.queue(KEY, token('Job2'));
+  store.conduct(KEY, token('Job1'));
+  store.archive(KEY, token('Job1'));
 
-  assert.equal(store.get('Instance1|').order.length, 2);
+  assert.equal(store.keepArchived(false), true);
+  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ]);
+
+  assert.equal(store.keepArchived(true), true, 'and the record begins afresh');
+  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ], 'rather than restoring what went');
+  assert.equal(store.isKeepingArchived(), true);
+});
+
+test('a performer closes with what it held', () => {
+  const store = machine();
+
+  store.queue(KEY, token('Job1'));
+
+  assert.equal(store.close('Instance1', 'Machine'), true);
+  assert.deepEqual(store.all(), []);
+  assert.equal(store.close('Instance1', 'Machine'), false, 'and closes once');
+});
+
+test('performers of one node in several instances are told apart', () => {
+  const store = new SequenceStore(MODEL);
+
+  store.open('Instance1', 'Machine');
+  store.open('Instance2', 'Machine');
+  store.queue('Instance2|Machine', token('Job1'));
+
+  assert.deepEqual(store.all().map((held) => held.key), [ 'Instance1|Machine', 'Instance2|Machine' ]);
+  assert.deepEqual(store.get('Instance1|Machine').order, [ DIVIDER ]);
+  assert.deepEqual(store.get('Instance2|Machine').order, [ DIVIDER, 'Job1|Task' ]);
 });
 
 test('what is cleared is everything, and it says whether it held anything', () => {
-  const store = new SequenceStore();
+  const store = new SequenceStore(MODEL);
 
   assert.equal(store.clear(), false);
-
-  store.apply([ machine(null, [ token('Job1', 'Task') ]) ]);
-
+  store.open('Instance1', 'Machine');
   assert.equal(store.clear(), true);
   assert.deepEqual(store.all(), []);
 });

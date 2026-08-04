@@ -1,5 +1,9 @@
 import { is, isAny } from 'bpmn-js/lib/util/ModelUtil.js';
 
+import { processOf } from '../animation-tokens.js';
+import sections from '../execution-state/sections.js';
+import { keyOf } from '../sequences/Store.js';
+
 /**
  * EngineLogPlayer — plays back a BPMN-OS engine execution log (`-log.json`) as animated token flow.
  *
@@ -57,6 +61,13 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
 
   // The store of the messages waiting, where a host provides one, on the same terms and for the same reason.
   this._messages = injector.get('messages', false);
+
+  // The store of the sequential performers, on the same terms again: a performer is opened, a token queued,
+  // conducted and archived as the records saying so are replayed, so what it holds is what the canvas shows.
+  this._sequences = injector.get('sequences', false);
+
+  // What a token declares, which the archive reads to freeze a token's values as it leaves.
+  this._executionData = injector.get('executionData', false);
 
   this._log = null;
   this._state = 'idle'; // 'idle' | 'playing' | 'paused'
@@ -270,6 +281,8 @@ EngineLogPlayer.prototype.play = async function(log) {
           await this._applyEvent(entry.event);
         } else if (entry.message) {
           this._applyMessage(entry.message);
+        } else if (entry.messageDeliveryRequest) {
+          this._applyDeliveryRequest(entry.messageDeliveryRequest);
         }
       }
     } catch (err) {
@@ -644,6 +657,106 @@ EngineLogPlayer.prototype._consume = function(node, label) {
 EngineLogPlayer.prototype._apply = function(record) {
   if (this._executionState) {
     this._executionState.apply(record);
+  }
+  this._applySequence(record);
+
+  // A token waiting for a message stops waiting the moment it reports anything past that waiting, whether
+  // it received what it waited for or left without it. The engine withdraws the request and says nothing,
+  // so its own record is what says so.
+  if (this._messages && record.nodeId && record.state !== 'BUSY') {
+    this._messages.settled(record.instanceId, record.nodeId);
+  }
+};
+
+// --- the sequential performers ----------------------------------------------
+//
+// A performer is the token standing at a node that performs, and it performs for as long as that token is
+// busy, which is for as long as the scope it stands in runs. A token at one of its activities queues on
+// READY, is the one being conducted from ENTERED, and is archived once it exits, staying where it stood as
+// a record of what the performer did. Which activities belong to
+// which performer is what the model resolved and what the store was given; which token performs for this
+// one is the token tree, climbed here because the animation holds it.
+EngineLogPlayer.prototype._applySequence = function(record) {
+  if (!this._sequences) {
+    return;
+  }
+
+  const node = record.nodeId || record.processId,
+        label = record.instanceId,
+        state = record.state;
+
+  if (this._sequences.performsSequentially(node)) {
+    if (state === 'BUSY') {
+      this._sequences.open(label, node);
+    } else if (state === 'COMPLETED' || state === 'FAILED' || state === 'WITHDRAWN') {
+      this._sequences.close(label, node);
+    }
+
+    return;
+  }
+
+  const performerNode = this._sequences.performerOf(node);
+
+  if (!performerNode) {
+    return; // no sequential activity, so no performer to place it under
+  }
+
+  const performer = this._performerOf(node, label, performerNode);
+
+  if (!performer) {
+    return; // the token stands where nothing has been drawn to perform for it
+  }
+
+  // the performer is keyed by the node the model named, not by the element the animation drew its token at:
+  // a process-level token is drawn at its pool, and this application speaks process ids
+  const key = keyOf(performer.label, performerNode),
+        token = { label, node };
+
+  if (state === 'READY') {
+    this._sequences.queue(key, token);
+  } else if (state === 'ENTERED') {
+    this._sequences.conduct(key, token);
+  } else if (state === 'EXITING' || state === 'DEPARTED' || state === 'DONE' ||
+             state === 'FAILED' || state === 'WITHDRAWN') {
+    // An archived row is a record rather than a token: what it holds is frozen here, as the token leaves,
+    // since the execution state forgets a token that is gone and the row would otherwise disclose nothing.
+    this._sequences.archive(key, token, this._valuesOf(node, label));
+  }
+};
+
+// What a token holds at this moment, in the sections a token entry shows it in, as plain values: a record
+// of what was, kept by whoever wants it after the token is gone.
+EngineLogPlayer.prototype._valuesOf = function(node, label) {
+  if (!this._executionState || !this._executionData || !this._executionData.get(node)) {
+    return null; // a host without the stores, or a node that declares nothing
+  }
+
+  return sections(this._executionData, this._executionState, node, label);
+};
+
+// The token performing for the token at `(node, label)`: the climb from it to the token standing at the
+// performer node, which is the walk the engine makes from a child of a sequential ad hoc subprocess. A
+// process-level token stands at its pool, so a performer named by a process is matched through it.
+EngineLogPlayer.prototype._performerOf = function(node, label, performerNode) {
+  let token = this._animation.getToken(node, label);
+
+  while (token) {
+    if (token.node === performerNode || processOf(this._elementRegistry, token.node) === performerNode) {
+      return token;
+    }
+    token = this._animation.getParent(token);
+  }
+
+  return null;
+};
+
+// Apply a message delivery request: a token has begun waiting for a message, and the record says what it
+// accepts. Which messages those are is not asked of the engine, since the answer changes with every message
+// created while the request stands and the request is not raised again; the criterion does not change, so
+// the store keeps it and matches the messages it holds against it.
+EngineLogPlayer.prototype._applyDeliveryRequest = function(record) {
+  if (this._messages) {
+    this._messages.awaiting(record);
   }
 };
 

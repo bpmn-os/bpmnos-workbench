@@ -1,5 +1,7 @@
 import createTokenEntry from 'bpmn-js-animation/lib/TokenEntry.js';
 
+import { processOf, tokenAt } from '../animation-tokens.js';
+
 /**
  * TokenRows — a token of a run, drawn as the Tokens tab draws it, wherever a panel needs to show one.
  *
@@ -45,10 +47,17 @@ TokenRows.$inject = [ 'injector', 'eventBus' ];
  *
  * @param {string} key  where the row is shown, which is the caller's to name
  * @param {{instanceId: string, nodeId: string}} identity  the token, as the engine names it
+ * The row is made once and handed back thereafter, so what a caller gives here is what the row was made
+ * with. A control that comes and goes with a token's state is mounted by its panel into `controlsEl`, which
+ * is handed back with the row for exactly that.
+ *
  * @param {Object} [options]
- * @param {Element} [options.control]  a control the row carries
+ * @param {Element} [options.control]  a control the row carries from the start
  * @param {Function} [options.detail]  (token, contentEl) => void, drawn after the host's own detail
- * @returns {{ element: Element, update: () => void, destroy: () => void }}
+ * @param {boolean} [options.frozen]   the row shows a token that is gone, so the host's detail, which reads
+ *                                     the running state, is left out and the panel's detail is the whole
+ *                                     of what it discloses
+ * @returns {{ element: Element, controlsEl: Element, update: () => void, destroy: () => void }}
  */
 TokenRows.prototype.create = function(key, identity, options = {}) {
   const held = this._rows.get(key);
@@ -60,12 +69,13 @@ TokenRows.prototype.create = function(key, identity, options = {}) {
   const entry = createTokenEntry(this._token(identity), {
     controls: options.control,
     displayNode: (id) => this._displayNode(id),
-    renderDetail: this._detail(options.detail),
+    renderDetail: this._detail(options.detail, options.frozen),
     onClick: (token, event) => this._select(token, event)
   });
 
   const row = {
     element: entry.element,
+    controlsEl: entry.controlsEl,
     update: () => entry.update(this._token(identity)),
     destroy: () => this._rows.delete(key)
   };
@@ -107,11 +117,12 @@ TokenRows.prototype._select = function(token, originalEvent) {
 
 /**
  * What a row discloses: what the host gives the token panel, so a token reads the same wherever it is
- * shown, and after it whatever the panel has to add. Where neither is given the row discloses nothing and
- * is drawn as a row without a caret.
+ * shown, and after it whatever the panel has to add. A frozen row leaves the host out, showing a token the
+ * run no longer holds, of which the host would report nothing. Where neither is given the row discloses
+ * nothing and is drawn as a row without a caret.
  */
-TokenRows.prototype._detail = function(detail) {
-  const host = (this._injector.get('config.tokenPanel', false) || {}).renderTokenDetail;
+TokenRows.prototype._detail = function(detail, frozen) {
+  const host = frozen ? null : (this._injector.get('config.tokenPanel', false) || {}).renderTokenDetail;
 
   if (!host && !detail) {
     return undefined;
@@ -129,20 +140,16 @@ TokenRows.prototype._detail = function(detail) {
 
 /** The animation's token, where it has drawn one, and otherwise the identity standing in for it. */
 TokenRows.prototype._token = function({ instanceId, nodeId }) {
-  const primitives = this._injector.get('primitives', false),
-        drawn = primitives && primitives.getTokens()
-          .find((token) => token.label === instanceId && token.node === nodeId);
-
-  return drawn || { label: instanceId, node: nodeId };
+  return tokenAt(
+    this._injector.get('primitives', false),
+    this._injector.get('elementRegistry', false),
+    instanceId, nodeId
+  ) || { label: instanceId, node: nodeId };
 };
 
 /** A pool shows the process it stands for, as the Tokens tab shows it. */
 TokenRows.prototype._displayNode = function(id) {
-  const registry = this._injector.get('elementRegistry', false),
-        element = registry && registry.get(id),
-        businessObject = element && element.businessObject;
-
-  return (businessObject && businessObject.processRef && businessObject.processRef.id) || id;
+  return processOf(this._injector.get('elementRegistry', false), id);
 };
 
 export default {

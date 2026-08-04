@@ -1,5 +1,8 @@
-import { createOrderedListEntry, createSimpleEntry } from 'bpmn-js-side-panel';
+import {
+  createCollapsibleEntry, createOrderedListEntry, createSimpleEntry, DELETE_SVG
+} from 'bpmn-js-side-panel';
 
+import { processOf, tokenAt } from '../animation-tokens.js';
 import addFilter from '../panel-filter.js';
 import { DIVIDER } from './Store.js';
 import createPerformerEntry from './PerformerEntry.js';
@@ -18,6 +21,10 @@ const DIVIDER_LABEL = 'Tokens above enter activity automatically';
  * is conducting or has been given, fixed at the head and taking no part in the order, then the tokens
  * waiting under it, and the divider among them. The arrows belong to that list rather than to the rows, so
  * what the reader does is move a row and what the panel does is record where it landed.
+ *
+ * What is listed is what the canvas shows, and the tab needs to do nothing to make it so: the store is
+ * written by the player as it draws, so a performer is there from the moment its token stands at its node,
+ * at first with nothing under it, and a token appears in its list as it becomes ready.
  */
 export default function SequencesPanel(injector, eventBus, sequences, config) {
   this._injector = injector;
@@ -83,7 +90,8 @@ SequencesPanel.prototype._build = function() {
 
   // The filter says which performers are listed and nothing about what a listed one shows. A performer's
   // list is an order, and an order shown in part is no order: an arrow would move a token past neighbours
-  // the reader cannot see.
+  // the reader cannot see. What it selects on is the performer's own token, the tokens of its list, and the
+  // ad hoc sub-processes it performs for.
   addFilter(heading, {
     name: 'wb-sequence-filter',
     onChange: (value) => {
@@ -92,9 +100,21 @@ SequencesPanel.prototype._build = function() {
     }
   });
 
+
+
   this._inspector = document.createElement('div');
   this._inspector.className = 'bjs-token-inspector';
 
+  // What a performer has done stays in its list, greyed, so that the reader can recap the order it worked
+  // in. What the switch governs is the keeping: turning it off forgets what is held and what leaves
+  // thereafter, and turning it on begins the record from that moment rather than restoring what was not
+  // kept. It is the bar the Tokens tab gives auto-focus, in the same classes, so the two read as one panel.
+  const controls = document.createElement('div');
+
+  controls.className = 'bjs-token-controls';
+  controls.appendChild(this._keepArchived());
+
+  root.appendChild(controls);
   root.appendChild(heading);
   root.appendChild(this._inspector);
 
@@ -137,19 +157,108 @@ SequencesPanel.prototype._render = function() {
   });
 };
 
+/** The animation's token for one the store holds, where it has drawn one. */
+SequencesPanel.prototype._token = function({ label, node }) {
+  return tokenAt(
+    this._injector.get('primitives', false),
+    this._injector.get('elementRegistry', false),
+    label, node
+  );
+};
+
+/** The bar that says whether what a performer has done is kept in its list, as the Tokens tab draws one. */
+SequencesPanel.prototype._keepArchived = function() {
+  const bar = document.createElement('label'),
+        toggle = document.createElement('span'),
+        box = document.createElement('input'),
+        slider = document.createElement('span'),
+        label = document.createElement('span');
+
+  bar.className = 'bjs-token-header';
+  toggle.className = 'bjs-token-toggle';
+  slider.className = 'bjs-token-toggle-slider';
+  box.type = 'checkbox';
+  box.checked = this._sequences.isKeepingArchived();
+  box.addEventListener('change', () => this._sequences.keepArchived(box.checked));
+  label.textContent = 'Keep archived tokens';
+
+  toggle.append(box, slider);
+  bar.append(toggle, label);
+
+  return bar;
+};
+
 /**
- * Whether a selection concerns this performer, which is what the filter selects on: any token its row
- * shows, its own, the one it conducts and the ones waiting under it. Selecting a performer therefore shows
- * that performer, and selecting a token shows wherever that token is waiting, which is the question a
- * reader of a scheduling model more often has.
+ * Whether a selection concerns this performer, which is what the filter selects on: its own token, a token
+ * of its list, and a token standing at an ad hoc sub-process it performs for. Selecting a performer shows
+ * that performer, selecting an activity token shows where it queues, and selecting the sub-process shows
+ * the performer that performs for it. A token elsewhere in the same process is no business of this
+ * performer's, whatever it stands under.
  */
 SequencesPanel.prototype._concerns = function(performer) {
   const primitives = this._injector.get('primitives', false),
-        selected = new Set((primitives ? primitives.getSelectedTokens() : [])
-          .map((token) => `${token.label}|${token.node || ''}`));
+        token = this._token(performer),
+        scopes = this._scopes(performer),
+        listed = new Set([ ...performer.tokens.values() ].map(({ label, node }) => `${label}|${node}`));
 
-  return [ performer.performer, ...performer.tokens.values() ]
-    .some((identity) => selected.has(`${identity.instanceId}|${identity.nodeId || ''}`));
+  if (!primitives) {
+    return false;
+  }
+
+  return primitives.getSelectedTokens().some((selected) => {
+    if (token && selected === token) {
+      return true; // the performer's own token
+    }
+
+    if (listed.has(`${selected.label}|${selected.node}`)) {
+      return true; // a token of its list, queued, conducted or archived
+    }
+
+    // a token standing at an ad hoc sub-process this performer performs for, which is the scope its list is
+    // drawn from. Everything else in the process is no business of this performer's, however near it stands.
+    return scopes.has(selected.node) && this._within(selected, token);
+  });
+};
+
+/** The ad hoc sub-processes a performer performs for: the scopes its sequential activities sit in. */
+SequencesPanel.prototype._scopes = function(performer) {
+  const registry = this._injector.get('elementRegistry', false),
+        scopes = new Set();
+
+  if (!registry) {
+    return scopes;
+  }
+
+  this._sequences.activitiesOf(performer.node).forEach((activity) => {
+    const element = registry.get(activity),
+          parent = element && element.parent;
+
+    if (parent && parent.id) {
+      scopes.add(parent.id);
+    }
+  });
+
+  return scopes;
+};
+
+/** Whether a token stands beneath another in the run's own token tree. */
+SequencesPanel.prototype._within = function(token, ancestor) {
+  const animation = this._injector.get('animation', false);
+
+  if (!ancestor || !animation) {
+    return false;
+  }
+
+  let candidate = animation.getParent(token);
+
+  while (candidate) {
+    if (candidate === ancestor) {
+      return true;
+    }
+    candidate = animation.getParent(candidate);
+  }
+
+  return false;
 };
 
 /**
@@ -157,29 +266,25 @@ SequencesPanel.prototype._concerns = function(performer) {
  * instance standing there, and the colour of that token where the animation has drawn one.
  */
 SequencesPanel.prototype._summary = function(performer) {
-  const identity = performer.performer || {};
-
   return {
     key: performer.key,
-    node: this._displayNode(identity.nodeId) || identity.processId,
-    instanceId: identity.instanceId,
-    color: this._color(identity),
-    kind: this._kind(identity)
+    node: this._displayNode(performer.node),
+    instanceId: performer.label,
+    color: this._color(performer),
+    kind: this._kind(performer.node)
   };
 };
 
 /**
- * Which of the three a performer is, which is what it is drawn as. A token carrying no node stands at the
- * process, and one carrying a node stands at the sub-process or the ad hoc sub-process it names. Where no
- * registry answers, the ad hoc sub-process is the safe reading, a model without a performer of its own
- * having every ad hoc sub-process perform for itself.
+ * Which of the three a performer is, which is what it is drawn as: the process it stands for where its node
+ * is a pool or a process, and otherwise the sub-process or the ad hoc sub-process it names.
  */
-SequencesPanel.prototype._kind = function({ nodeId }) {
+SequencesPanel.prototype._kind = function(node) {
   const registry = this._injector.get('elementRegistry', false),
-        element = nodeId && registry && registry.get(nodeId),
+        element = node && registry && registry.get(node),
         type = element && element.businessObject && element.businessObject.$type;
 
-  if (!nodeId || type === 'bpmn:Participant' || type === 'bpmn:Process') {
+  if (type === 'bpmn:Participant' || type === 'bpmn:Process' || !type) {
     return 'process';
   }
 
@@ -205,14 +310,16 @@ SequencesPanel.prototype._list = function(performer) {
       return;
     }
 
-    const row = this._row(performer, key);
+    const archived = performer.archived.has(key),
+          settled = archived || key === performer.conducting || key === performer.committed,
+          row = this._row(performer, key, archived);
 
     if (row) {
-      // the anchor is greyed to say what its missing arrows say: it takes no part in the order. It is a
-      // token like any other and selects like one; a row cached from an earlier draw gives the mark back
-      // when its token returns to the order.
-      row.classList.toggle('wb-performer-fixed', key === performer.fixed);
-      list.add(key, row, undefined, { fixed: key === performer.fixed });
+      // A settled row takes no part in the order: what has been offered cannot be taken back, what is being
+      // conducted is under way, and what is archived is done. The first is still to come, so it keeps its
+      // weight; the other two are greyed, being what the performer is doing or has done.
+      row.classList.toggle('wb-performer-fixed', archived || key === performer.conducting);
+      list.add(key, row, undefined, { fixed: settled });
     }
   });
 
@@ -227,7 +334,7 @@ SequencesPanel.prototype._list = function(performer) {
  * in the list of one performer while another token of the same instance may stand in another, and one
  * element being unable to stand in two lists.
  */
-SequencesPanel.prototype._row = function(performer, key) {
+SequencesPanel.prototype._row = function(performer, key, archived) {
   const tokenRows = this._injector.get('tokenRows', false),
         identity = performer.tokens.get(key);
 
@@ -235,14 +342,86 @@ SequencesPanel.prototype._row = function(performer, key) {
     return null;
   }
 
-  return tokenRows.create(`${performer.key}|${key}`, identity).element;
+  // the row is the Tokens tab's row, which names a token by the instance it belongs to and the node it
+  // stands at. It is made once and kept, so what it carries is mounted here rather than given at its
+  // making: a row becomes archived long after it was drawn, and only an archived row offers to be
+  // forgotten, that costing the run nothing.
+  // An archived row is a record rather than a token, so it is a row of its own: the run holds nothing of
+  // that token any more, and the values it discloses are the ones frozen as it left.
+  const row = archived
+    ? tokenRows.create(`${performer.key}|${key}|archived`, {
+      instanceId: identity.label,
+      nodeId: identity.node
+    }, {
+      frozen: true,
+      detail: (token, contentEl) => this._frozen(performer, key, contentEl)
+    })
+    : tokenRows.create(`${performer.key}|${key}`, {
+      instanceId: identity.label,
+      nodeId: identity.node
+    });
+
+  if (row.controlsEl) {
+    row.controlsEl.innerHTML = '';
+
+    if (archived) {
+      row.controlsEl.appendChild(this._forget(performer, key));
+    }
+  }
+
+  return row.element;
+};
+
+/**
+ * What an archived row discloses: the values the token held as it left, in the sections a token entry shows
+ * them in, drawn as the execution state's own view draws them. They are frozen, so nothing is kept current
+ * here and nothing needs to be.
+ */
+SequencesPanel.prototype._frozen = function(performer, key, contentEl) {
+  const held = this._sequences.archivedValues(performer.key, key);
+
+  if (!held) {
+    return;
+  }
+
+  held.forEach((section) => {
+    const entry = createCollapsibleEntry({ label: section.label, open: true, caretSide: 'left' });
+
+    section.rows.forEach(({ name, value }) => {
+      const line = document.createElement('div'),
+            nameEl = document.createElement('span'),
+            valueEl = document.createElement('span'),
+            unset = value === null || value === undefined;
+
+      line.className = 'wb-attribute';
+      nameEl.className = 'wb-attribute-name';
+      valueEl.className = 'wb-attribute-value' + (unset ? ' wb-attribute-null' : '');
+      nameEl.textContent = name;
+      valueEl.textContent = unset ? 'undefined' : String(value);
+      line.append(nameEl, valueEl);
+      entry.contentEl.appendChild(line);
+    });
+
+    contentEl.appendChild(entry.element);
+  });
+};
+
+/** The offer to forget one archived row, which is the only row a reader may take away. */
+SequencesPanel.prototype._forget = function(performer, key) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className = 'bjs-collapsible-entry-control wb-forget';
+  button.title = 'Forget this token';
+  button.innerHTML = DELETE_SVG;
+  button.addEventListener('click', () => this._sequences.forget(performer.key, key));
+
+  return button;
 };
 
 /** The colour the animation draws that token in, where it has drawn it. */
-SequencesPanel.prototype._color = function({ instanceId, nodeId }) {
-  const primitives = this._injector.get('primitives', false),
-        drawn = primitives && primitives.getTokens()
-          .find((token) => token.label === instanceId && token.node === (nodeId || token.node));
+SequencesPanel.prototype._color = function(identity) {
+  const drawn = this._token(identity);
 
   return drawn ? drawn.color : null;
 };
