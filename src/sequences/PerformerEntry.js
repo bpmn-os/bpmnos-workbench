@@ -15,6 +15,7 @@ import { createCollapsibleEntry } from 'bpmn-js-side-panel';
  * @param {boolean} [options.open=false]  whether the row starts expanded
  * @param {Function} [options.onToggle]   (open) => void
  * @param {Element} [options.body]        what the expanded row shows
+ * @param {Function} [options.onClick]    (originalEvent) => void, a click on the row rather than the caret
  */
 export default function createPerformerEntry(performer, options = {}) {
   const summary = el('span', 'bjs-token-summary'),
@@ -38,6 +39,21 @@ export default function createPerformerEntry(performer, options = {}) {
 
   if (options.body) {
     entry.contentEl.appendChild(options.body);
+  }
+
+  // A click on the row selects the token standing at the performing node, as a click on a token row does,
+  // which is what `toggleOn: 'caret'` leaves free. The click is not given to the entry itself: that would
+  // bind it to the whole entry, body included, and what the body holds acts on itself rather than on the
+  // performer — reordering the tokens waiting under it is not an act of selection. So a click that starts
+  // inside the body is left to the body, exactly as the token entry leaves it.
+  if (options.onClick) {
+    entry.element.classList.add('bjs-token-clickable');
+    entry.element.addEventListener('click', (event) => {
+      if (entry.contentEl && entry.contentEl.contains(event.target)) {
+        return;
+      }
+      options.onClick(event);
+    });
   }
 
   return entry;

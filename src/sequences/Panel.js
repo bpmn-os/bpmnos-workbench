@@ -4,6 +4,7 @@ import {
 
 import { processOf, tokenAt } from '../animation-tokens.js';
 import addFilter from '../panel-filter.js';
+import { selectionFor } from '../token-rows/select.js';
 import { DIVIDER } from './Store.js';
 import createPerformerEntry from './PerformerEntry.js';
 
@@ -41,12 +42,9 @@ export default function SequencesPanel(injector, eventBus, sequences, config) {
   eventBus.on('sequences.changed', () => this._render());
   eventBus.on('mode.changed', () => this._applyNote());
 
-  // the filter selects by what the reader has selected, so the list follows a change of selection
-  eventBus.on('token.selection.changed', () => {
-    if (this._filter === 'selected') {
-      this._render();
-    }
-  });
+  // A performer row is tinted where its token is selected and the filter selects by what is selected, so
+  // the list follows a change of selection whichever the filter is.
+  eventBus.on('token.selection.changed', () => this._render());
 }
 
 SequencesPanel.$inject = [ 'injector', 'eventBus', 'sequences', 'config.sequencesPanel' ];
@@ -147,11 +145,23 @@ SequencesPanel.prototype._render = function() {
   }
 
   performers.forEach((performer) => {
+    // the token standing at the performing node, where the animation has drawn one: a click on the row
+    // selects it, and the row is tinted while it is selected
+    const selection = selectionFor(this._injector, this._eventBus, {
+      instanceId: performer.label,
+      nodeId: performer.node
+    });
+
     const entry = createPerformerEntry(this._summary(performer), {
       open: this._open.get(performer.key) === true,
       onToggle: (open) => this._open.set(performer.key, open),
-      body: this._list(performer)
+      body: this._list(performer),
+      onClick: selection && selection.onClick
     });
+
+    if (selection) {
+      entry.element.classList.toggle('bjs-token-selected', selection.selected);
+    }
 
     this._inspector.appendChild(entry.element);
   });

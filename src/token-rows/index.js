@@ -1,6 +1,7 @@
 import createTokenEntry from 'bpmn-js-animation/lib/TokenEntry.js';
 
 import { processOf, tokenAt } from '../animation-tokens.js';
+import { selectToken } from './select.js';
 
 /**
  * TokenRows — a token of a run, drawn as the Tokens tab draws it, wherever a panel needs to show one.
@@ -86,33 +87,11 @@ TokenRows.prototype.create = function(key, identity, options = {}) {
 };
 
 /**
- * Selecting the token a row shows, which is what a click on it does, exactly as a click in the Tokens tab
- * does: the token's stacks are brought to the front and the ordinary click-selection is announced, so a
- * token selected here is selected on the canvas and in every other list showing it. The reader's own event
- * goes with it, so shift adds a token to the selection, or takes it out again, as it does on the canvas.
- *
- * A token the animation has not drawn is a stand-in with no stack to reveal and nothing to select, so its
- * row stays inert rather than announcing a click for a token that is not there.
- *
- * A double click is not offered. In the Tokens tab it advances the token, and in this application the
- * engine advances tokens; a decision panel that advanced one would be a second way to drive the run.
+ * Selecting the token a row shows, which is what a click on it does. The act itself is `select.js`, which a
+ * performer and a decision use as well, so that every list of this application selects the same way.
  */
 TokenRows.prototype._select = function(token, originalEvent) {
-  const animation = this._injector.get('animation', false);
-
-  if (!token.state) {
-    return; // a stand-in: the engine is ahead of what has been drawn
-  }
-
-  Promise.resolve(animation && animation.reveal(token)).then(() => {
-    this._eventBus.fire('token.click', {
-      node: token.node,
-      label: token.label,
-      sequenceFlow: token.state.sequenceFlow || null,
-      stackIndices: token.stackIndices || {},
-      originalEvent: originalEvent || {}
-    });
-  });
+  selectToken(this._injector, this._eventBus, token, originalEvent);
 };
 
 /**
