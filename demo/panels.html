@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/src/execution-state/execution-state.css">
   <link rel="stylesheet" href="/src/messages/messages.css">
   <link rel="stylesheet" href="/src/sequences/sequences.css">
+  <link rel="stylesheet" href="/src/decisions/decisions.css">
   <style>
     body {
       margin: 0;
@@ -55,6 +56,11 @@
     <div id="pane-messages"></div>
   </div>
 
+  <div class="pane">
+    <div class="pane-header">Decisions</div>
+    <div id="pane-decisions"></div>
+  </div>
+
   <div class="side">
     <h2>What the store holds (live)</h2>
     <pre id="out"></pre>
@@ -67,8 +73,17 @@
       it; the second is a sub-process conducting one, greyed where it stands and carrying no arrows; the
       third is a process standing idle with nothing under it. Move a row with ▲ and ▼ and watch the order above: that is what a later report is read against.
       Nothing passes the fixed entry, and the divider is a row of the list like any other, so moving it is
-      the same act as moving a token past it. Tick a token to select it and the filter of either heading
+      the same act as moving a token past it. Tick a token to select it and the filter of any heading
       narrows to what that selection concerns.
+    </p>
+    <p class="hint">
+      The Decisions tab holds a decision task per row, drawn with the symbol `bpmnos-js` draws it with on
+      the canvas and marked with the token standing at it. Expanding one shows what that token holds and
+      then its choices, each as a name above the control that takes it. Choose a mode on the first and the
+      duration beneath it opens with the bounds and the step that mode allows; choose a duration and the
+      paper plane is offered; then change the mode to one whose bounds no longer admit that duration and
+      watch the duration clear and the offer withdraw. A choice that cannot yet be made is shown all the
+      same, so the reader sees how many the task requires.
     </p>
   </div>
 
@@ -79,6 +94,8 @@
     import SequencesPanel from '/src/sequences/Panel.js';
     import { Messages } from '/src/messages/index.js';
     import MessagesPanel from '/src/messages/Panel.js';
+    import { Decisions } from '/src/decisions/index.js';
+    import DecisionsPanel from '/src/decisions/Panel.js';
     import { TokenRows } from '/src/token-rows/index.js';
 
     // What a run produces, hardcoded: the model's own resolution, and the records a player would replay
@@ -134,7 +151,9 @@
     const HELD = {
       Activity_1: { Status: { timestamp: 0, duration: 3 }, Data: { job: 'A' } },
       Activity_2: { Status: { timestamp: 0, duration: 7 }, Data: { job: 'B' } },
-      Activity_3: { Status: { timestamp: 0, duration: 2 }, Data: { job: 'C' } }
+      Activity_3: { Status: { timestamp: 0, duration: 2 }, Data: { job: 'C' } },
+      DecisionTask_1: { Status: { timestamp: 4, mode: null, duration: null }, Data: { job: 'A' } },
+      DecisionTask_2: { Status: { timestamp: 6, index: null }, Data: { job: 'B' } }
     };
 
     // the tokens the animation would have drawn, which is where a row takes its colour and its state from
@@ -144,7 +163,8 @@
       [ 'Instance_1', 'AdHocSubProcess_1' ], [ 'Instance_1', 'Activity_1' ],
       [ 'Instance_1', 'Activity_2' ], [ 'Instance_1', 'Activity_3' ],
       [ 'Instance_2', 'SubProcess_1' ], [ 'Instance_2', 'Activity_1' ], [ 'Instance_2', 'Activity_2' ],
-      [ 'Instance_3', 'Process_1' ]
+      [ 'Instance_3', 'Process_1' ],
+      [ 'Instance_1', 'DecisionTask_1' ], [ 'Instance_2', 'DecisionTask_2' ]
     ].map(([ label, node ]) => ({ label, node, color: COLORS[label], state: {}, selected: false }));
 
     // the services the panel asks for, each of them optional to it, so a stub is a stub and not a fake
@@ -231,8 +251,10 @@
       }
     };
 
+    const PANES = { messages: 'pane-messages', decisions: 'pane-decisions' };
+
     const sidePanel = {
-      addTab: ({ id }) => ({ body: document.getElementById(id === 'messages' ? 'pane-messages' : 'pane') }),
+      addTab: ({ id }) => ({ body: document.getElementById(PANES[id] || 'pane') }),
       setNote() {}
     };
 
@@ -259,13 +281,16 @@
     const tokenRows = new TokenRows(injector, eventBus);
     const sequences = new Sequences(eventBus);
     const messages = new Messages(eventBus);
+    const decisions = new Decisions(eventBus);
 
     services.sequences = sequences;
     services.messages = messages;
+    services.decisions = decisions;
 
     // no model note: the demo is the content of the tabs rather than the application they sit in
     new SequencesPanel(injector, eventBus, sequences, {});
     new MessagesPanel(injector, eventBus, messages, {});
+    new DecisionsPanel(injector, eventBus, decisions, {});
 
     // written as the player writes them: the model's resolution first, then the records
     sequences.setModel(MODEL);
@@ -280,6 +305,109 @@
 
     messages.apply(MESSAGE, COLORS.Instance_1);
     messages.awaiting(DELIVERY_REQUEST);
+
+    // Two decision tasks waiting, standing in for what a run would ask. The first shows the whole of what
+    // the tab is about: a second choice whose bounds and step follow from the first, so that choosing a
+    // mode changes what a duration may be, and changing the mode afterwards invalidates a duration that no
+    // longer fits. The second has a single choice and is there so that the simple case can be seen beside
+    // the dependent one.
+    // the attribute of a choice is the name the engine reports it by, and nothing more
+    const DECLARATIONS = {
+      DecisionTask_1: [ 'mode', 'duration' ],
+      DecisionTask_2: [ 'index' ]
+    };
+
+    const BY_MODE = {
+      road: { lowerBound: 4, upperBound: 12, multipleOf: 1 },
+      rail: { lowerBound: 8, upperBound: 24, multipleOf: 2 },
+      air: { lowerBound: 1, upperBound: 6, multipleOf: 1 }
+    };
+
+    // what wasm answers: the options of the next choice, given the values already chosen. Nothing of the
+    // status, the data or the globals crosses; the token standing at the task holds all of it.
+    const OPTIONS = (nodeId, values) => {
+      const attribute = DECLARATIONS[nodeId][values.length];
+
+      if (nodeId === 'DecisionTask_1') {
+        return values.length === 0
+          ? { attribute, enumeration: [ 'road', 'rail', 'air' ] }
+          : { attribute, ...BY_MODE[values[0]] };
+      }
+
+      return { attribute, lowerBound: 1, upperBound: 5, multipleOf: 1 };
+    };
+
+    const admits = (options, value) => options.enumeration
+      ? options.enumeration.includes(value)
+      : value >= options.lowerBound && value <= options.upperBound;
+
+    /*
+     * The walk the panel makes: ask for the first choice, and where the value held is still among the
+     * options, extend the prefix and ask again. Where it is not, clear it and everything after it. A choice
+     * the walk cannot reach is still shown, by its attribute alone, so the reader sees how many choices the
+     * task requires rather than only the one they may make now.
+     *
+     * In the application this is driven by `playback.drained`, the moment the diagram has caught up and the
+     * engine stands still; here it is driven by the store changing, which is the same thing without a run.
+     */
+    function walk(key) {
+      const decision = decisions.get(key);
+
+      if (!decision) {
+        return;
+      }
+
+      const declarations = DECLARATIONS[decision.nodeId] || [],
+            held = decision.choices.map((choice) => choice.value),
+            prefix = [];
+
+      let reachable = true;
+
+      declarations.forEach((attribute, index) => {
+        if (!reachable) {
+          decisions.setOptions(key, index, { attribute });
+
+          return;
+        }
+
+        const options = OPTIONS(decision.nodeId, prefix);
+
+        decisions.setOptions(key, index, options);
+
+        const value = held[index];
+
+        if (value !== undefined && admits(options, value)) {
+          prefix.push(value);
+        } else {
+          if (value !== undefined) {
+            decisions.clearFrom(key, index);
+          }
+          reachable = false;
+        }
+      });
+
+      if (prefix.length === declarations.length) {
+        decisions.setOptions(key, declarations.length, null);
+      }
+    }
+
+    decisions.open('Instance_1', 'DecisionTask_1');
+    decisions.open('Instance_2', 'DecisionTask_2');
+
+    // the walk runs again whenever the store changes, as it runs in the application whenever the diagram
+    // has caught up; the guard is because walking writes to the store it is walking
+    let walking = false;
+
+    eventBus.on('decisions.changed', () => {
+      if (walking) {
+        return;
+      }
+      walking = true;
+      decisions.all().forEach((decision) => walk(decision.key));
+      walking = false;
+    });
+
+    decisions.all().forEach((decision) => walk(decision.key));
 
     const out = document.getElementById('out');
 

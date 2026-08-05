@@ -1,5 +1,7 @@
 import EngineRunner from '../engine/EngineRunner.js';
 import createInput from '../input/index.js';
+import choicesOf from '../decisions/declarations.js';
+import walk from '../decisions/walk.js';
 
 /*
  * createManual — the manual-simulation source: the engine runs, the user decides.
@@ -34,6 +36,7 @@ export default function createManual(modeler, clock) {
   let drained = false;      // the diagram shows everything the engine has produced so far
   let decided = [];         // what the user has decided and the engine has not yet been given
   let deciding = false;     // a decision is with the engine; the rest of `decided` follows it
+  let walking = false;      // the choices are being read; the walk writes the store it is walking
 
   function activate() {
     if (!tokenPanel || input) {
@@ -171,6 +174,58 @@ export default function createManual(modeler, clock) {
     clock.setWaiting(running && stalled && drained);
   }
 
+  /*
+   * What each choice of each waiting decision task may take.
+   *
+   * Only an engine standing at the token can answer it: a choice is bounded or enumerated by an expression
+   * over the status, the data and the globals, and no record carries the answer. A decision task states its
+   * choices in order and a later one may depend on the earlier ones, so the engine is asked for one choice
+   * at a time, against the values already selected, until it says there are no more.
+   *
+   * It is asked when the player says it has drawn everything the engine has done, which in a manual
+   * simulation is the moment before the reader can act: nothing changes without them, so the data and the
+   * globals a condition reads move only as a consequence of a clock tick, a delivery, an entry or another
+   * choice, and each of those returns a step. Between such a change and this walk the options shown may be
+   * out of date, and it does not matter, because the reader cannot answer them until the engine has stalled.
+   *
+   * A value the reader holds that the answer no longer admits is cleared, and everything after it with it,
+   * which is the whole of what "a later choice may become invalid" means.
+   */
+  async function walkDecisions() {
+    const decisions = modeler.get('decisions', false);
+
+    if (!decisions || !running || walking) {
+      return;
+    }
+
+    walking = true;
+
+    try {
+      for (const decision of decisions.all()) {
+        await walkDecision(decisions, decision);
+      }
+    } catch (err) {
+      console.error('[manual] the choices could not be read:', err);
+    } finally {
+      walking = false;
+    }
+  }
+
+  async function walkDecision(decisions, decision) {
+    return walk(
+      decisions,
+      decision,
+      (instanceId, nodeId, selected) => runner.choiceCandidates(instanceId, nodeId, selected),
+      choicesOf(nodeOf(decision.nodeId)).map((choice) => choice.name)
+    );
+  }
+
+  function nodeOf(nodeId) {
+    const element = modeler.get('elementRegistry', false).get(nodeId);
+
+    return element && element.businessObject;
+  }
+
   // Everything the user decides reaches the engine here, named rather than typed: a clock tick, a message
   // delivery, and a choice or a sequential entry when those are built, each one queued and the engine let
   // go. A decision may be made at any moment, including while the engine is still answering the previous
@@ -208,7 +263,13 @@ export default function createManual(modeler, clock) {
   eventBus.on('playback.drained', () => {
     drained = true;
     sayWaiting();
+    walkDecisions();
   });
+
+  // The reader has chosen, so the values a later choice may take are a different question from the one
+  // already answered. Asking again is what opens the choice below the one just made, and what withdraws a
+  // value further down that the new prefix no longer admits.
+  eventBus.on('decisions.selected', () => walkDecisions());
 
   // whatever panel offers a decision announces it here rather than reaching for the engine, so a panel
   // knows what was decided and nothing else

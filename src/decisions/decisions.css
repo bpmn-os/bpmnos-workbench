@@ -1,0 +1,83 @@
+/* The Decisions tab draws in the Tokens tab's classes and adds only what a choice needs, which the other
+   tabs have no counterpart for: a control that takes a value, and the offer to submit what was entered. */
+
+/* A choice is written into the body, as a token's attributes are read from it, so the section takes the
+   body's own inset and adds nothing. The tokens of a message pull out of that inset because a token row is
+   a row of the panel wherever it is shown; a control is not, and pulling it out would leave its right edge
+   short of the values above it. */
+.wb-choices {
+  margin: 0;
+  padding: 0;
+
+  /* What a token holds is drawn in sections of its own, one level deeper than this, and the side panel
+     gives such a body a right inset matching the caret's optical gap. This section is not one of them, so
+     it takes that inset here instead, and a control ends where the values above it end. The four pixels are
+     the side panel's own and are written out because it states them as a literal rather than as a token. */
+  padding-right: 4px;
+}
+
+/* the title reads as the sections above it: their colour is the panel's own, where a list title in the
+   Tokens tab is greyed */
+.wb-choices > .bjs-token-list-title {
+  padding-left: 0;
+  color: inherit;
+}
+
+/* A choice is its name above its control rather than beside it. A value is read across a line and belongs
+   beside its name; a control is operated, and a drop-down of place names or a number input with its arrows
+   needs the width of a panel that is narrow. */
+.wb-choice {
+  padding: 2px 0 6px;
+}
+
+.wb-choice-name {
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bjs-grey-35, hsl(225, 10%, 35%));
+}
+
+.wb-choice-control {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 3px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--bjs-grey-15, hsl(225, 10%, 15%));
+  background: #fff;
+  border: 1px solid var(--bjs-grey-75, hsl(225, 10%, 75%));
+  border-radius: 2px;
+}
+
+.wb-choice-control:focus {
+  outline: none;
+  border-color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
+/* A choice whose options are not yet known is one the reader cannot yet make, the choices before it not
+   having been made. It is drawn all the same, so that the reader sees how many choices there are. */
+.wb-choice-control:disabled {
+  cursor: default;
+  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
+  background: var(--bjs-grey-97, hsl(225, 10%, 97%));
+}
+
+/* the offer to submit, whose shape is the side panel's own round hit area; only what is its own is here */
+.wb-submit svg {
+  width: 12px;
+  height: 12px;
+}
+
+.wb-submit:hover:not(:disabled) {
+  color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
+/* not every choice has been made, or the decision is with the engine: the offer neither invites nor answers */
+.wb-submit:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

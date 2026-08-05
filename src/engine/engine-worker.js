@@ -183,6 +183,22 @@ self.onmessage = async (event) => {
       return;
     }
 
+    if (message.type === 'choiceCandidates') {
+      // What a choice may take, which no record says: only an engine standing at the token can evaluate a
+      // condition against the status, the data and the globals it then holds. A decision task states its
+      // choices in order and a later one may depend on the earlier ones, so this is asked for one choice at
+      // a time, against the values already selected. It asks and does not advance: the run stands exactly
+      // where it stood.
+      self.postMessage({
+        type: 'choiceCandidates',
+        candidates: session
+          ? JSON.parse(session.controller.getChoiceCandidates(
+            message.instanceId, message.nodeId, JSON.stringify(message.selectedValues || [])))
+          : {}
+      });
+      return;
+    }
+
     if (message.type === 'enqueue') {
       if (!session) {
         self.postMessage({ type: 'error', error: 'no run to continue' });

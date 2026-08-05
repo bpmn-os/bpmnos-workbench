@@ -54,6 +54,21 @@ export default class EngineRunner {
   }
 
   /**
+   * What the next choice of a decision task may take, given the values already selected for the choices
+   * before it. The engine is asked and not advanced, so a run stands exactly where it stood.
+   *
+   * It is the one question a run answers that no record does: a choice may be bounded or enumerated by an
+   * expression over the status, the data and the globals, and only an engine standing at the token can
+   * evaluate one. The answer is `{}` where the request no longer stands, `{ complete: true }` where every
+   * choice has a value, and otherwise the attribute and either an enumeration or bounds with a step.
+   */
+  choiceCandidates(instanceId, nodeId, selectedValues) {
+    return this._request('choiceCandidates', {
+      type: 'choiceCandidates', instanceId, nodeId, selectedValues
+    });
+  }
+
+  /**
    * Queue one thing the user decided and let the engine carry on. The event names what the controller is
    * asked to queue — `clockTick`, `termination`, `entry`, `exit`, `choice` or `messageDelivery` — so a
    * decision this application does not yet make needs no change here.
@@ -91,6 +106,11 @@ export default class EngineRunner {
     }
     if (msg.type === 'described' && this._pending && this._pending.kind === 'described') {
       const p = this._pending; this._pending = null; p.resolve(msg.described);
+      return;
+    }
+
+    if (msg.type === 'choiceCandidates' && this._pending && this._pending.kind === 'choiceCandidates') {
+      const p = this._pending; this._pending = null; p.resolve(msg.candidates);
       return;
     }
 

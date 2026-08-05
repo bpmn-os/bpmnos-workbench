@@ -123,6 +123,29 @@ Key source (this repo):
   governs the keeping rather than the showing: turning it off forgets what is held, and turning it on begins
   the record afresh. The heading's filter lists a performer for its own token, a token of its list, and a
   token standing at an ad hoc sub-process it performs for, and for nothing else in the same process.
+- `src/decisions/` — the decision tasks a run waits at and the choices each waits for: `Store.js` (plain,
+  node-testable, holding per decision what the engine has answered and what the reader has entered),
+  `declarations.js` (the choices a task states, read from `bpmnos:decisions` in the model),
+  `DecisionEntry.js` (the task drawn with `bpmnos-js/decision-task-symbol` marked with its token, and a
+  choice as its attribute above the control that takes it), `Panel.js` (the "Decisions" tab) and
+  `decisions.css`.
+
+  Which choices a task states is model knowledge and is read from the moddle extension; what each may take
+  is a run's answer and is asked of the bridge. The two are separate because a choice is bounded or
+  enumerated by an expression over the status, the data and the globals, so only an engine standing at the
+  token can evaluate it, and because a decision task states its choices in order with a later one depending
+  on the earlier ones — `DecisionTask::determineAlternatives` writes each chosen value into the status
+  before evaluating the next condition. So the bridge answers one choice at a time, against the values
+  already selected, and `src/manual/index.js` walks it whenever the player announces `playback.drained`,
+  which in a manual run is the moment the diagram has caught up and the engine stands still. A value the
+  answer no longer admits is cleared, and everything after it with it. The player opens a decision on a
+  `choiceRequest` record and closes it when its token reports any state past `BUSY`, on the same terms as a
+  message that stops being awaited.
+
+  The bounds the bridge reports are already the multiples of the discretizer within the condition's bounds,
+  so a number input stepping from the minimum lands on values the engine admits; strictness and the
+  attribute's type have been resolved before they arrive. A choice not yet reachable is drawn all the same,
+  disabled, so the reader sees how many the task requires.
 - `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
   since radios of one name are one group and two tabs are alive at once.
 - `src/animation-tokens.js` — the seam between the identities this application speaks and the tokens the

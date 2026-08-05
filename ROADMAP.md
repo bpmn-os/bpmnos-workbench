@@ -27,6 +27,15 @@ resolves, through `describeModel`, which reports the sequential performers and t
 and what a token waiting for a message accepts, which a `messageDeliveryRequest` record now carries, since
 the messages that match it change with every message created while the request stands.
 
+A choice is the third such thing, and it is asked rather than carried. What a choice may take is bounded or
+enumerated by an expression over the status, the data and the globals, so only an engine standing at the
+token can evaluate one, and a decision task states its choices in order with a later one depending on the
+earlier ones. The bridge therefore answers one choice at a time, against the values already selected, and
+the page asks again whenever the player says it has drawn everything the engine has done — which in a manual
+simulation is the moment before the reader can act, since nothing changes without them. Which choices a task
+states is not asked at all: `bpmnos:decisions` says so in the model, and the moddle extension parses it, so
+a choice not yet reachable can be shown greyed rather than the tab disclosing one choice at a time.
+
 The Sequences tab shows, per performer, what it has done, what it is doing and what it may take next, in an
 order the reader sets, and the first token above its divider is offered whenever a performer is idle and the
 transport plays. A token that has left is archived where it stood, frozen with the values it held, and may
@@ -59,11 +68,12 @@ panels of R3 and R6, whose rows are token entries drawn by the same view.
 
 ## Status (2026-07-21)
 
-**Playback, greedy simulation, the manual clock and message delivery are built and working.** The app
-scaffold, the engine-token → animation mapping, the live wasm greedy run, a manual run the user carries
-forward by clicking the canvas clock, and the delivery of a message to a token the user picks are done. What
-remains of interactive simulation is the rest of the deciding: a choice and a sequential entry are settled by
-the composition today, and each becomes the user's as its panel arrives. The **observation panels** (Tokens/Messages richer views) remain, as does moving the
+**Playback, greedy simulation, the manual clock, message delivery, the sequential order and the choices of a
+decision task are built.** The app scaffold, the engine-token → animation mapping, the live wasm greedy run,
+a manual run the user carries forward by clicking the canvas clock, the delivery of a message to a token the
+user picks, the order a performer works through, and the Decisions tab are done. The Decisions tab awaits a
+`bpmnos-wasm` whose `getChoiceCandidates` takes the values already selected; the published `dist` still
+carries the earlier signature, so the tab draws but cannot yet be answered by a run. The **observation panels** (Tokens/Messages richer views) remain, as does moving the
 run's controls out of the Tokens tab into a footer of the side panel, which is where a manual run's start,
 refresh and decisions belong.
 

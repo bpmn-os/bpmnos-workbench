@@ -43,7 +43,10 @@ export default defineConfig({
   // (inherits, …) so their default imports resolve. (Excluding it instead breaks that CJS interop.)
   // The plugin above still covers the production rollup build, where optimizeDeps does not apply.
   optimizeDeps: {
-    include: [ 'bpmnos-js' ],
+    // Subpaths are not covered by including the package entry: vite would discover them on first import
+    // and re-optimize while the page is loading, which serves a half-written artifact. Each subpath the
+    // app imports is therefore named here.
+    include: [ 'bpmnos-js', 'bpmnos-js/decision-task-symbol' ],
     // the BPMN-OS wasm engine's emscripten glue loads bpmnos.wasm via new URL('bpmnos.wasm',
     // import.meta.url); keep it out of the dep pre-bundler so that relative resolution survives.
     exclude: [ '@bpmn-os/bpmnos-wasm' ],

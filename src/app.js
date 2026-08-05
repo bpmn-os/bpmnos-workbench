@@ -10,6 +10,7 @@ import 'bpmnos-js/bpmnos.css';        // the decision-task and execution-data-bo
 import './execution-state/execution-state.css'; // the token entry's status/data/globals body
 import './messages/messages.css';               // the offer to deliver a message to a waiting token
 import './sequences/sequences.css';             // the divider of a performer's list
+import './decisions/decisions.css';             // the controls a choice is made with
 import './app.less';
 
 import BpmnModeler from 'bpmn-js/lib/Modeler.js';
@@ -40,6 +41,7 @@ import EnginePlaybackModule from './playback/index.js';
 import ExecutionStateModule, { createTokenDetailRenderer } from './execution-state/index.js';
 import MessagesModule from './messages/index.js';        // → the "Messages" tab
 import SequencesModule from './sequences/index.js';      // → the "Sequences" tab
+import DecisionsModule from './decisions/index.js';      // → the "Decisions" tab
 import TokenRowsModule from './token-rows/index.js';     // token rows a decision panel mounts
 import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
 import createManual from './manual/index.js';           // manual simulation: the user advances the run
@@ -114,6 +116,10 @@ const modeler = new BpmnModeler({
     // a run has the performers, so in Model mode this tab says the same as the two above it
     modelNote: runNote
   },
+  decisionsPanel: {
+    // a run asks for the choices, so in Model mode this tab says the same as the three above it
+    modelNote: runNote
+  },
   mode: {
     // read-only outside Model mode, except for the execution data box (see `modeExceptions`)
     exceptions: modeExceptions
@@ -142,6 +148,7 @@ const modeler = new BpmnModeler({
     ExecutionStateModule, // → `executionState`: status, data and globals per token, written by the player
     MessagesModule,       // → the "Messages" tab
     SequencesModule,      // → the "Sequences" tab
+    DecisionsModule,      // → the "Decisions" tab
     TokenRowsModule,      // token rows, drawn as the Tokens tab draws them, for panels that decide
     EnginePlaybackModule  // → overrides `playback` with the native engine-log player (list last)
   ],

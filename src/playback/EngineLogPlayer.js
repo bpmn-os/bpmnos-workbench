@@ -66,6 +66,10 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   // conducted and archived as the records saying so are replayed, so what it holds is what the canvas shows.
   this._sequences = injector.get('sequences', false);
 
+  // The store of the decision tasks waiting for a choice, on the same terms again: a decision appears when
+  // the record announcing the request is replayed, and goes when the token carrying it moves on.
+  this._decisions = injector.get('decisions', false);
+
   // What a token declares, which the archive reads to freeze a token's values as it leaves.
   this._executionData = injector.get('executionData', false);
 
@@ -283,6 +287,8 @@ EngineLogPlayer.prototype.play = async function(log) {
           this._applyMessage(entry.message);
         } else if (entry.messageDeliveryRequest) {
           this._applyDeliveryRequest(entry.messageDeliveryRequest);
+        } else if (entry.choiceRequest) {
+          this._applyChoiceRequest(entry.choiceRequest);
         }
       }
     } catch (err) {
@@ -666,6 +672,13 @@ EngineLogPlayer.prototype._apply = function(record) {
   if (this._messages && record.nodeId && record.state !== 'BUSY') {
     this._messages.settled(record.instanceId, record.nodeId);
   }
+
+  // A decision task waiting for its choices stops waiting on the same terms and for the same reason: the
+  // request stands while the token is busy at the task, and any state past that is the run having moved on,
+  // whether the choices were made or the token did not survive to make them.
+  if (this._decisions && record.nodeId && record.state !== 'BUSY') {
+    this._decisions.close(record.instanceId, record.nodeId);
+  }
 };
 
 // --- the sequential performers ----------------------------------------------
@@ -757,6 +770,15 @@ EngineLogPlayer.prototype._performerOf = function(node, label, performerNode) {
 EngineLogPlayer.prototype._applyDeliveryRequest = function(record) {
   if (this._messages) {
     this._messages.awaiting(record);
+  }
+};
+
+// Apply a choice request: a decision task waits for its choices to be made. The record says which token
+// waits, and nothing more; which choices the task states is read from the model, and what each may take is
+// asked of the engine when it is shown, since only an engine standing at the token can evaluate a condition.
+EngineLogPlayer.prototype._applyChoiceRequest = function(record) {
+  if (this._decisions) {
+    this._decisions.open(record.instanceId, record.nodeId);
   }
 };
 
