@@ -69,6 +69,15 @@ Key source (this repo):
   **directly** — it does NOT translate to the library's 5-action execution log. Per-state → animation-call
   mapping (R1 positions, `pulse` in playback).
 
+  A token rests without a cue unless the run is waiting for the reader. The pulse is the animation's
+  `pulse-pause`, which that package documents as a decision to pick and which the canvas clock wears while
+  the engine waits for a tick, so the two read as one thing; the Tokens tab mirrors it on the row's swatch.
+  It is worn at the three places a decision is the reader's and nowhere else: a decision task `BUSY`, an
+  activity `READY` where a sequential performer conducts it, and a receive task or an element carrying a
+  message event definition `BUSY`. Which activities a performer conducts is asked of the `sequences` store
+  rather than derived, so a host without it shows no entry pulse rather than a wrong one, and a
+  multi-instance activity needs no case of its own since each instance is a token at the same node.
+
   It is also the only writer of every store a run fills — the execution state, the messages and the
   sequences — and it writes each record as it draws it. That is what keeps a panel from running ahead of
   the canvas, and it is why a panel must never read the engine's present: a run's records arrive long

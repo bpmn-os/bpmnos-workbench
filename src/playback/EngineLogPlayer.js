@@ -22,11 +22,17 @@ import { keyOf } from '../sequences/Store.js';
  *   identity           label = instanceId; a process/scope-level token (no nodeId) keys on the processId
  *   birth              process/scope ENTERED, or a scope start event ENTERED  → createToken
  *   flow hop           DEPARTED(source, flow) → advanceToken travel to the far node (arrival rides the flow)
- *   activity dwell     READY → entry/pulse · ENTERED → entry · BUSY → busy/pulse · COMPLETED → completion/pulse
- *   event/gateway      ENTERED → anchor centre · BUSY → pulse in place (e.g. a timer waiting)
+ *   activity dwell     READY → entry · ENTERED → entry · BUSY → busy · COMPLETED → completion
+ *   event/gateway      ENTERED → anchor centre · BUSY → rests in place (e.g. a timer counting down)
  *   death              DONE / WITHDRAWN / FAILED → consumeToken (flip + fade out)
  *
- * In playback the manual "bounce" wait cue is replaced by a calmer "pulse" at the same position.
+ * A position is where a token rests; a cue is why it is still there. The two are decided apart, and only
+ * one cue is used: the pulse a token wears while the run waits for the reader, at the three places a
+ * decision is theirs to make — a decision task working through its choices, an activity of a sequential
+ * performer waiting to be let in, and a receive task or a message catch event waiting for a delivery. See
+ * `_waitCue`. Everywhere else a token rests without a cue, because the engine resolves what comes next by
+ * itself and the rest is an instant rather than a wait.
+ *
  * Transport (play / pause / resume / stop, speed) mirrors bpmn-js-animation's `Playback`.
  */
 
@@ -34,8 +40,11 @@ const ENTRY = 'entry';
 const BUSY = 'busy';
 const COMPLETION = 'completion';
 
-// playback shows a resting/working token as a pulse (manual simulation would bounce at the same spot)
-const CUE = 'pulse';
+// The cue a token wears while the run waits for the reader. It is the animation's `pulse-pause`, which
+// that package documents as meaning a decision to pick, and which the canvas clock already wears while the
+// engine waits for a tick — so the two read as one thing, a run standing still until someone acts. The
+// Tokens tab mirrors it on the row's swatch, so a waiting token is recognisable in the list as well.
+const CUE = 'pulse-pause';
 
 function abortError() {
   const err = new Error('playback aborted');
@@ -466,7 +475,9 @@ EngineLogPlayer.prototype._resolve = async function(token, flows) {
   if (nodeId && isMultiInstanceNode(element) && !this._miParent(node, label)) {
     switch (state) {
       case 'ARRIVED':
-        this._cue(node, label, CUE, sequenceFlowId); // pulse-pause on the inflow while it can still spawn
+        // the main thread resting on the inflow while its instances run: the engine spawns them, so there
+        // is nothing here for the reader to answer
+        this._cue(node, label, null, sequenceFlowId);
         return;
       case 'DEPARTED':
         // released onto the outflow by the last sub's consume — travel it onward
@@ -513,8 +524,10 @@ EngineLogPlayer.prototype._resolve = async function(token, flows) {
       return; // handled by the birth above
 
     case 'READY':
-      // an activity / MI instance awaiting its entry decision — ready (entry) position, pulsating
-      return anim.advanceToken({ node, label, position: ENTRY, animate: CUE });
+      // an activity or one instance of a multi-instance activity awaiting its entry decision — the ready
+      // (entry) position, pulsing only where that decision is the reader's, which is where a sequential
+      // performer conducts the activity
+      return anim.advanceToken({ node, label, position: ENTRY, animate: this._waitCue(element, state) });
 
     case 'ENTERED':
       if (containerLike) {
@@ -527,16 +540,19 @@ EngineLogPlayer.prototype._resolve = async function(token, flows) {
 
     case 'BUSY':
       if (containerLike) {
-        return anim.advanceToken({ node, label, position: BUSY, animate: CUE });
+        return anim.advanceToken({ node, label, position: BUSY, animate: this._waitCue(element, state) });
       }
-      // a catch event doing its work (e.g. a timer counting down) — pulse in place. A cue-only change
-      // (no position change) does not wait: the pulse persists on the token until the next state.
-      this._cue(node, label, CUE);
+      // a catch event doing its work, a timer counting down among them. It wears the cue only where the
+      // work is a message it waits for, since that delivery is the reader's to make and a timer is not.
+      // A cue-only change (no position change) does not wait: what is set persists until the next state.
+      this._cue(node, label, this._waitCue(element, state));
       return;
 
     case 'COMPLETED':
       if (containerLike) {
-        return anim.advanceToken({ node, label, position: COMPLETION, animate: CUE });
+        // resting at completion with no cue: the exit that follows is resolved by the engine rather than
+        // asked of the reader
+        return anim.advanceToken({ node, label, position: COMPLETION, animate: null });
       }
       this._cue(node, label, null);
       return;
@@ -559,14 +575,15 @@ EngineLogPlayer.prototype._resolve = async function(token, flows) {
       return;
 
     case 'ARRIVED':
-      // the DEPARTED travel already moved it here; it now rests on the incoming flow — pulsate while it
-      // awaits the ready event (R1: arrival position, pulsating)
-      this._cue(node, label, CUE, sequenceFlowId);
+      // the DEPARTED travel already moved it here; it now rests on the incoming flow awaiting the ready
+      // event, which the engine raises by itself, so the token rests without a cue
+      this._cue(node, label, null, sequenceFlowId);
       return;
 
     case 'WAITING':
-      // an MI main token, or a token parked at a converging gateway — pulse in place. Cue-only, so no wait.
-      this._cue(node, label, CUE);
+      // an MI main token, or a token parked at a converging gateway: waiting on the run rather than on the
+      // reader, so no cue. Cue-only, so no wait.
+      this._cue(node, label, null);
       return;
 
     case 'DONE':
@@ -871,6 +888,64 @@ EngineLogPlayer.prototype._miParent = function(node, label) {
 
 // Set a resting token's motion cue, tolerating a token that is not (yet) there. `sequenceFlow` targets a
 // token resting on that flow (e.g. one that just arrived), otherwise the anchored token at the node.
+/**
+ * The cue a token resting in this state wears, which is the pulse where the run is waiting for the reader
+ * and nothing otherwise.
+ *
+ * A pulse says that nothing will happen here until someone decides, so it is worn at exactly the three
+ * places a decision is the reader's: a decision task working through its choices, an activity of a
+ * sequential performer waiting to be let in, and a receive task or a message catch event waiting for a
+ * delivery. Those are the three the engine leaves to the caller; every other decision it resolves itself,
+ * and a token resting while it does so is resting for an instant rather than waiting for anyone.
+ *
+ * A multi-instance activity needs no case of its own. Each instance is a token at the same node, so an
+ * instance of an activity a performer conducts pulses on `READY` as any other token there would; only the
+ * main token is handled apart, and it never reaches `READY`.
+ *
+ * Which activities a performer conducts is what the model resolves and the sequences store holds, so it is
+ * asked rather than derived: a host without that store shows no entry pulse rather than a wrong one.
+ */
+EngineLogPlayer.prototype._waitCue = function(element, state) {
+  if (!element) {
+    return null;
+  }
+
+  if (state === 'READY') {
+    return this._sequences && this._sequences.performerOf(element.id) ? CUE : null;
+  }
+
+  if (state !== 'BUSY') {
+    return null;
+  }
+
+  return isDecisionTask(element) || awaitsMessage(element) ? CUE : null;
+};
+
+/** A decision task: a plain task carrying `bpmnos:type="Decision"`, as `bpmnos-js` reads it. */
+function isDecisionTask(element) {
+  const businessObject = element.businessObject;
+
+  return !!businessObject && typeof businessObject.get === 'function'
+    && businessObject.get('type') === 'Decision';
+}
+
+/**
+ * Whether the element waits for a message to be delivered to it. A receive task is one by its kind, and an
+ * event is one by carrying a message event definition — which covers the intermediate catch event, the
+ * boundary event and the start event of an event sub-process alike, since the engine raises the same
+ * delivery request for each and the reader answers it the same way.
+ */
+function awaitsMessage(element) {
+  if (is(element, 'bpmn:ReceiveTask')) {
+    return true;
+  }
+
+  const businessObject = element.businessObject,
+        definitions = (businessObject && businessObject.eventDefinitions) || [];
+
+  return definitions.some((definition) => definition.$type === 'bpmn:MessageEventDefinition');
+}
+
 EngineLogPlayer.prototype._cue = function(node, label, animate, sequenceFlow) {
   try {
     if (this._animation.getToken(node, label, sequenceFlow)) {
