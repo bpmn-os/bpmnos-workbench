@@ -1,3 +1,32 @@
+/**
+ * Whether two answers say the same thing. They are compared by what they hold rather than by identity,
+ * since each is built afresh from a reply that crossed the bridge as text and is never the same object
+ * twice.
+ */
+function same(held, answered) {
+  if (!held) {
+    return false;
+  }
+
+  const keys = new Set([ ...Object.keys(held), ...Object.keys(answered) ]);
+
+  for (const key of keys) {
+    const a = held[key],
+          b = answered[key];
+
+    if (Array.isArray(a) || Array.isArray(b)) {
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length
+          || a.some((value, at) => value !== b[at])) {
+        return false;
+      }
+    } else if (a !== b) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /** What identifies a decision here: the instance the token belongs to and the node it stands at. */
 export function keyOf(instanceId, nodeId) {
   return `${instanceId}|${nodeId}`;
@@ -17,9 +46,10 @@ export function keyOf(instanceId, nodeId) {
  * cover it, and it keeps the asking, which is asynchronous, out of a structure that is not.
  *
  * Choices are made in order. A choice whose options are unknown is one the reader cannot yet make, and a
- * value entered against an earlier choice drops the answers after it, since what those choices may take is
- * now a different question. The value held at a later position is not dropped with them: the caller asks
- * again, and only where the value it holds is no longer among the options is it cleared.
+ * value entered against an earlier choice makes what the later ones may take a different question, which
+ * the caller asks again. Neither the answers nor the values held after it are given up in the meantime:
+ * they stand until the new answer replaces them, and only where a value is no longer among the options is
+ * it cleared. The decision is not submittable while any of it is stale, a value entered marking it so.
  */
 export default class DecisionStore {
 
@@ -67,8 +97,15 @@ export default class DecisionStore {
    *
    * @param {string} key
    * @param {number} index
-   * @param {Object|null} options  `{ attribute: { id, name, type }, enumeration }` or
-   *                               `{ attribute, lowerBound, upperBound, multipleOf }`, or null
+   * Answering a position with what it already holds is not a change and is reported as none. The same
+   * question is asked again whenever anything about the decision moves, and most of the time it has the
+   * same answer; a caller that redrew on each of those would redraw a control the reader is working in for
+   * no reason.
+   *
+   * @param {string} key
+   * @param {number} index
+   * @param {Object|null} options  `{ attribute, enumeration }` or `{ attribute, lowerBound, upperBound,
+   *                               lowest, highest, multipleOf }`, or null where there is no such choice
    */
   setOptions(key, index, options) {
     const held = this._decisions.get(key);
@@ -78,15 +115,24 @@ export default class DecisionStore {
     }
 
     if (!options) {
+      if (held.choices.length === index && held.complete) {
+        return false;
+      }
+
       held.choices.length = index;
       held.complete = true;
 
       return true;
     }
 
-    const value = held.choices[index] ? held.choices[index].value : undefined;
+    const value = held.choices[index] ? held.choices[index].value : undefined,
+          answered = { ...options, value };
 
-    held.choices[index] = { ...options, value };
+    if (!held.complete && same(held.choices[index], answered)) {
+      return false;
+    }
+
+    held.choices[index] = answered;
     held.complete = false;
 
     return true;
@@ -95,11 +141,16 @@ export default class DecisionStore {
   /**
    * The reader has chosen.
    *
-   * Every later choice was answered for a prefix that no longer holds, so what it may take and what was
-   * chosen for it are given up. The choice itself is not: that a decision task states it is a property of
-   * the model and no answer can withdraw it, and a reader who saw a row vanish as they filled in the one
-   * above would be told the task had changed shape. So the later choices are reduced to the attribute they
-   * are of, which is what a choice not yet reachable shows in any case, and wait to be answered again.
+   * Every later choice was answered for a prefix that no longer holds, so what it may take is now a
+   * different question and is asked again. What it answered before is left standing until the new answer
+   * arrives. Taking it away first would say something that is not so — that the choice cannot be made —
+   * and would say it for exactly as long as the question takes to answer, which is a redraw the reader
+   * sees and cannot act on. An answer that is stale for a frame is the lesser claim, and a value it no
+   * longer admits is cleared by the caller when it asks.
+   *
+   * The choices are not shortened either. That a decision task states a choice is a property of the model
+   * and no answer withdraws it, and a reader who saw a row vanish as they filled in the one above would be
+   * told the task had changed shape.
    */
   setValue(key, index, value) {
     const held = this._decisions.get(key),
@@ -110,8 +161,6 @@ export default class DecisionStore {
     }
 
     choice.value = value;
-    held.choices = held.choices.slice(0, index + 1).concat(
-      held.choices.slice(index + 1).map((later) => ({ attribute: later.attribute })));
     held.complete = false;
     held.awaited = false;
 

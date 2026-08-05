@@ -1,6 +1,8 @@
 import { createCollapsibleEntry } from 'bpmn-js-side-panel';
 import { createDecisionTaskSymbol } from 'bpmnos-js/decision-task-symbol';
 
+import { next, shownValue, snap, walkable } from './grid.js';
+
 /**
  * One decision task rendered as a side-panel entry, on the pattern of the performer entry and the message
  * entry, and in the Tokens tab's classes, so that the lists of this application are one appearance rather
@@ -85,8 +87,14 @@ export default function createDecisionEntry(decision, options = {}) {
  * The attribute is the name the engine reports it by, which is a name and not a structure: what the choice
  * is of is all a reader needs, and the panel resolves nothing against it.
  *
- * @param {Object} choice  `{ attribute: s, enumeration?, lowerBound?, upperBound?, multipleOf?, value? }`,
- *                         or `{ attribute: s }` alone where the choice cannot yet be made
+ * A bound the engine cannot offer is said so under the control. The values a choice admits are the multiples
+ * of its step, and a step the engine cannot hold exactly puts them slightly beside the values the model
+ * states, so the least selectable value may lie above the lower bound and the greatest below the upper. It
+ * is said only where a reader could see it, which is where the two differ once both are written to the
+ * precision the control shows; a difference that rounds away is not one the reader can act on.
+ *
+ * @param {Object} choice  `{ attribute: s, enumeration?, lowerBound?, upperBound?, lowest?, highest?,
+ *                         multipleOf?, value? }`, or `{ attribute: s }` alone where it cannot yet be made
  * @param {Function} onChange  (value) => void
  */
 export function createChoiceRow(choice, onChange) {
@@ -94,77 +102,255 @@ export function createChoiceRow(choice, onChange) {
 
   row.appendChild(text('div', 'wb-choice-name', choice.attribute || ''));
 
-  const control = choice.enumeration
-    ? enumerationControl(choice)
-    : numberControl(choice);
+  if (kindOf(choice) === 'enumeration') {
+    const select = enumerationControl(choice);
 
-  control.className = 'wb-choice-control';
-  control.disabled = !choice.enumeration && choice.lowerBound === undefined;
-  control.addEventListener('change', () => onChange(read(control, choice)));
+    select.className = 'wb-choice-control';
+    select.addEventListener('change', () => onChange(read(select, choice)));
 
-  row.appendChild(control);
+    row.appendChild(select);
+  } else {
+    row.appendChild(spinner(choice, onChange));
+  }
+
+  notes(choice).forEach((note) => row.appendChild(note));
 
   return row;
 }
 
-/** A choice among named values: a drop-down, with nothing chosen until the reader chooses. */
+/**
+ * Which control a choice is made with.
+ *
+ * The kind is the model's, reported by `describeModel` and carried onto every answer, so a choice is drawn
+ * as what it is before a run has said what it may take and does not turn from one control into another as
+ * it becomes reachable. Where the model said nothing of it — a host that never asked for a description — it
+ * is read from the answer instead, which is right whenever there is an answer to read.
+ */
+function kindOf(choice) {
+  if (choice.kind) {
+    return choice.kind;
+  }
+
+  return choice.enumeration ? 'enumeration' : 'bounds';
+}
+
+/**
+ * What the reader is told about a bound that cannot be offered, one note per bound.
+ *
+ * Each is shown only where the difference survives the precision the control is written to, since a reader
+ * comparing what they see cannot act on a difference they cannot see.
+ */
+function notes(choice) {
+  // A choice that admits nothing at all. The engine answers a bounded choice whose grid holds no multiple
+  // with an empty enumeration, and an enumerated one whose alternatives all fall away the same way, so the
+  // two arrive alike. An empty drop-down would read as a choice not yet answered, which is the opposite of
+  // what this is: it is answered, and the answer is that the decision cannot be made.
+  if (choice.enumeration && !choice.enumeration.length) {
+    return [ text('div', 'wb-choice-note', 'ⓘ No value satisfies this choice.') ];
+  }
+
+  if (choice.lowest === undefined) {
+    return [];
+  }
+
+  const told = [];
+
+  if (shownValue(choice.lowest, choice) > shownValue(choice.lowerBound, choice)) {
+    told.push(text('div', 'wb-choice-note', 'ⓘ Numeric imprecision may cause the lower bound to be excluded.'));
+  }
+
+  if (shownValue(choice.highest, choice) < shownValue(choice.upperBound, choice)) {
+    told.push(text('div', 'wb-choice-note', 'ⓘ Numeric imprecision may cause the upper bound to be excluded.'));
+  }
+
+  return told;
+}
+
+/**
+ * A choice among named values: a drop-down, with nothing chosen until the reader chooses.
+ *
+ * The first entry is a prompt rather than a value. It is what the control reads before a choice is made,
+ * and it is disabled and hidden so that it cannot be chosen and does not stand among the values in the open
+ * list: a reader offered it as though it were a value would be offered something the engine would refuse.
+ * There is no need for them to reach it by hand either, since a choice is unmade only when an earlier one
+ * changes, which clears it.
+ *
+ * A choice not yet reachable is drawn as the prompt alone, disabled, since what it may take is a question
+ * that cannot be asked until the choices before it are made. It reads as the prompt even where a value is
+ * held: the store keeps a value while its options are withdrawn, so that a re-answer admitting it can keep
+ * it, and a value with no option to stand for cannot be shown by a drop-down at all — telling the control
+ * to show it would leave it on no option and render it blank.
+ */
 function enumerationControl(choice) {
   const select = document.createElement('select'),
-        empty = document.createElement('option');
+        prompt = document.createElement('option'),
+        values = choice.enumeration || [];
 
-  empty.value = '';
-  empty.textContent = '—';
-  select.appendChild(empty);
+  // The attribute rather than the property, which is what reflects it: an option's value is the attribute
+  // where it carries one and its text where it does not, and setting the attribute says the same thing in
+  // every document.
+  prompt.setAttribute('value', '');
+  prompt.textContent = 'Select value';
+  prompt.disabled = true;
+  prompt.hidden = true;
+  select.appendChild(prompt);
 
-  choice.enumeration.forEach((value) => {
+  // The value held, which the control can only read where an option stands for it. The store keeps a value
+  // while its options are withdrawn, so that a re-answer admitting it can keep it; a drop-down told to show
+  // such a value would be left on no option at all and would read as blank, where the prompt is what it
+  // means.
+  const chosen = choice.value === undefined ? '' : String(choice.value);
+
+  let selected = prompt;
+
+  values.forEach((value) => {
     const option = document.createElement('option');
 
-    option.value = String(value);
+    option.setAttribute('value', String(value));
     option.textContent = String(value);
+
+    if (String(value) === chosen) {
+      selected = option;
+    }
+
     select.appendChild(option);
   });
 
-  select.value = choice.value === undefined ? '' : String(choice.value);
+  // The option is marked rather than the select assigned: what a select reads is the selectedness of its
+  // options, and marking one says it directly.
+  selected.selected = true;
+  select.disabled = !values.length;
 
   return select;
 }
 
 /**
- * A choice within bounds: a number input carrying the bounds and the discretizer, so that the control
- * itself refuses what the condition refuses and the reader is not told afterwards.
+ * A choice within bounds: a field holding a number, and a pair of arrows walking the values it admits.
+ *
+ * It is deliberately not an `input` of type number. Such a control has one notion of a value and one grid,
+ * declared through `min` and `step` and expressed in the numbers the field itself carries; the grid a choice
+ * admits is counted from zero and expressed in the numbers the engine holds, and a reader is shown neither
+ * of those but a number rounded to a precision they could have written. Asked to step, the control first
+ * moves the value onto its own grid and only then advances, so a press is swallowed where the rounded number
+ * lies just below its multiple and a value is skipped where it lies just above, and what it leaves behind is
+ * the unrounded number it computed. None of that can be corrected afterwards, the reader having already been
+ * shown a value nobody chose. React Aria's number field is a text field with its own arrows for the same
+ * reason, and this follows it.
+ *
+ * So the field is text, marked as a spin button for whoever is not reading it visually, and the walking is
+ * done here against the values the choice admits. What the reader types remains theirs to type and is
+ * settled only when they are done.
  */
-function numberControl(choice) {
-  const input = document.createElement('input');
+function spinner(choice, onChange) {
+  const field = el('div', 'wb-choice-field'),
+        control = document.createElement('input'),
+        up = arrow('up'),
+        down = arrow('down');
 
-  input.type = 'number';
+  control.type = 'text';
+  control.inputMode = 'decimal';
+  control.className = 'wb-choice-control';
+  control.disabled = choice.lowest === undefined;
+  control.setAttribute('role', 'spinbutton');
 
-  if (choice.lowerBound !== undefined) {
-    input.min = String(choice.lowerBound);
-    input.max = String(choice.upperBound);
-    input.step = choice.multipleOf === undefined ? 'any' : String(choice.multipleOf);
-    input.placeholder = `${choice.lowerBound} … ${choice.upperBound}`;
+  if (choice.lowest !== undefined) {
+    control.placeholder = `${shownValue(choice.lowest, choice)} … ${shownValue(choice.highest, choice)}`;
+    control.setAttribute('aria-valuemin', String(choice.lowest));
+    control.setAttribute('aria-valuemax', String(choice.highest));
   }
 
-  input.value = choice.value === undefined ? '' : String(choice.value);
+  // The value the field stands on, which is the one the choice admits rather than the one it reads: what a
+  // reader sees is written to the precision they read, and the value itself is held here beside it.
+  let held = choice.value;
 
-  return input;
+  const write = (value) => {
+    held = value;
+    control.value = value === undefined ? '' : String(shownValue(value, choice));
+    control.setAttribute('aria-valuenow', value === undefined ? '' : String(value));
+    control.setAttribute('aria-valuetext', control.value);
+
+    // An arrow that cannot move is not offered, so a reader at an end of the grid is told they are there
+    // rather than left pressing something that does nothing.
+    up.disabled = control.disabled || (held !== undefined && held >= choice.highest);
+    down.disabled = control.disabled || (held !== undefined && held <= choice.lowest);
+  };
+
+  const move = (direction) => {
+    write(next(held, direction, choice));
+    onChange(held);
+    control.focus();
+  };
+
+  up.addEventListener('click', () => move(1));
+  down.addEventListener('click', () => move(-1));
+
+  control.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+      return;
+    }
+
+    event.preventDefault();
+    move(event.key === 'ArrowUp' ? 1 : -1);
+  });
+
+  // What the reader wrote is settled when they are done writing it, not while they write: a number is
+  // entered a digit at a time, and every prefix of it is a number of its own.
+  control.addEventListener('change', () => {
+    write(read(control, choice));
+    onChange(held);
+  });
+
+  write(choice.value);
+
+  field.appendChild(control);
+
+  if (walkable(choice)) {
+    field.appendChild(up);
+    field.appendChild(down);
+    field.classList.add('wb-choice-field-walkable');
+  }
+
+  return field;
+}
+
+function arrow(direction) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className = `wb-choice-arrow wb-choice-arrow-${direction}`;
+  button.tabIndex = -1; // the field is what a reader tabs to, and the arrow keys are what walk it
+  button.setAttribute('aria-hidden', 'true');
+
+  return button;
 }
 
 /**
- * The value the reader entered, or nothing where the control is empty.
+ * The value the reader entered, or nothing where the control is empty or holds no number.
  *
  * Whether it is a name or a number is read from the values offered rather than from a declared type: the
  * engine renders each candidate in its attribute's own type, so an enumeration of names arrives as names,
  * and a choice within bounds is a number by construction.
+ *
+ * A number is settled on the nearest value the choice admits rather than taken as typed. The values admitted
+ * are the multiples of the step, and a reader writing to a precision of their own would otherwise enter one
+ * lying between two of them: the engine would take it, nothing would refuse it, and the field would go on
+ * showing a number that is not the one held. Settling it makes what is shown what is submitted, which is the
+ * whole reason the field is written to a reader's precision at all.
  */
 function read(control, choice) {
-  if (control.value === '') {
+  if (control.value.trim() === '') {
     return undefined;
   }
 
   const named = (choice.enumeration || []).some((value) => typeof value === 'string');
 
-  return named ? control.value : Number(control.value);
+  if (named) {
+    return control.value;
+  }
+
+  const entered = Number(control.value);
+
+  return Number.isFinite(entered) ? snap(entered, choice) : undefined;
 }
 
 /** The lane a symbol is drawn in and the height it is drawn at, which are the performer symbols' own. */

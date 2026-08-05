@@ -10,17 +10,22 @@ import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
 import DecisionStore, { keyOf } from '../src/decisions/Store.js';
-import walkDecision, { admits } from '../src/decisions/walk.js';
+import walkDecision from '../src/decisions/walk.js';
 
 const KEY = keyOf('Instance_1', 'DecisionTask_1');
 
 // a task of two choices: a mode, and a duration whose bounds follow from it
 const BY_MODE = {
-  road: { attribute: 'duration', lowerBound: 4, upperBound: 12, multipleOf: 1 },
-  rail: { attribute: 'duration', lowerBound: 8, upperBound: 24, multipleOf: 2 }
+  road: { attribute: 'duration', lowerBound: 4, upperBound: 12, lowest: 4, highest: 12, multipleOf: 1 },
+  rail: { attribute: 'duration', lowerBound: 8, upperBound: 24, lowest: 8, highest: 24, multipleOf: 2 }
 };
 
-const DECLARED = [ 'mode', 'duration' ];
+// what the model states of each choice, as `describeModel` reports it: the attribute it is of and whether
+// it is an enumeration or a pair of bounds, both settled when the engine built the model
+const DECLARED = [
+  { attribute: { id: 'Attribute_1', name: 'mode', type: 'string' }, kind: 'enumeration' },
+  { attribute: { id: 'Attribute_2', name: 'duration', type: 'integer' }, kind: 'bounds' }
+];
 
 /** The resolver a run would be, and a record of every prefix it was asked with. */
 function resolver() {
@@ -74,7 +79,7 @@ describe('walking the choices of a decision task', () => {
     await walkDecision(store, store.get(KEY), ask, DECLARED);
 
     assert.deepEqual(asked.slice(1), [ [], [ 'rail' ] ], 'asked with the growing prefix, not with everything');
-    assert.equal(store.get(KEY).choices[1].lowerBound, 8, 'the second choice follows from the first');
+    assert.equal(store.get(KEY).choices[1].lowest, 8, 'the second choice follows from the first');
     assert.equal(store.get(KEY).choices[1].multipleOf, 2);
   });
 
@@ -115,7 +120,7 @@ describe('walking the choices of a decision task', () => {
     await walkDecision(store, store.get(KEY), ask, DECLARED);
     store.setValue(KEY, 0, 'road');
     await walkDecision(store, store.get(KEY), ask, DECLARED);
-    store.setValue(KEY, 1, 5);          // admitted by road, whose bounds are four to twelve
+    store.setValue(KEY, 1, 5);          // admitted by road, whose range is four to twelve by one
     await walkDecision(store, store.get(KEY), ask, DECLARED);
     assert.equal(store.submittable(KEY), true);
 
@@ -134,23 +139,5 @@ describe('walking the choices of a decision task', () => {
 
     assert.equal(store.get(KEY).choices.length, 0);
     assert.equal(store.get(KEY).complete, false, 'an overtaken request is not a complete one');
-  });
-});
-
-describe('whether an answer admits a value', () => {
-
-  it('admits a member of its enumeration and nothing else', () => {
-    assert.equal(admits({ enumeration: [ 'road', 'rail' ] }, 'rail'), true);
-    assert.equal(admits({ enumeration: [ 'road', 'rail' ] }, 'air'), false);
-  });
-
-  it('admits a value within its bounds', () => {
-    assert.equal(admits({ lowerBound: 4, upperBound: 12 }, 4), true);
-    assert.equal(admits({ lowerBound: 4, upperBound: 12 }, 12), true);
-    assert.equal(admits({ lowerBound: 4, upperBound: 12 }, 13), false);
-  });
-
-  it('admits nothing where the choice cannot yet be made', () => {
-    assert.equal(admits({ attribute: 'duration' }, 8), false);
   });
 });

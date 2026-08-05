@@ -97,6 +97,7 @@
     import { Decisions } from '/src/decisions/index.js';
     import DecisionsPanel from '/src/decisions/Panel.js';
     import { TokenRows } from '/src/token-rows/index.js';
+    import walkDecision from '/src/decisions/walk.js';
 
     // What a run produces, hardcoded: the model's own resolution, and the records a player would replay
     // one at a time. The stores are written exactly as the player writes them, so the page shows what a run
@@ -311,22 +312,36 @@
     // mode changes what a duration may be, and changing the mode afterwards invalidates a duration that no
     // longer fits. The second has a single choice and is there so that the simple case can be seen beside
     // the dependent one.
-    // the attribute of a choice is the name the engine reports it by, and nothing more
+    // what `describeModel` reports of each decision task: the choices it states, in order, each with the
+    // attribute it is of and whether it is an enumeration or a pair of bounds, both settled by the engine
+    // when it built the model
     const DECLARATIONS = {
-      DecisionTask_1: [ 'mode', 'duration' ],
-      DecisionTask_2: [ 'index' ]
+      DecisionTask_1: [
+        { attribute: { id: 'Attribute_mode', name: 'mode', type: 'string' }, kind: 'enumeration' },
+        { attribute: { id: 'Attribute_duration', name: 'duration', type: 'integer' }, kind: 'bounds' }
+      ],
+      DecisionTask_2: [
+        { attribute: { id: 'Attribute_index', name: 'index', type: 'decimal' }, kind: 'bounds' }
+      ]
     };
 
+    // A bounded answer carries two pairs: the bounds the condition states, and beside them the least and
+    // the greatest value that may be selected, which are the first and the last multiple of the step within
+    // them. Air is the case the panel must say something about: a third of an hour is held slightly beside
+    // itself, so neither bound is a multiple and neither can be offered.
+    const THIRD = 21845 / 65536;
+
     const BY_MODE = {
-      road: { lowerBound: 4, upperBound: 12, multipleOf: 1 },
-      rail: { lowerBound: 8, upperBound: 24, multipleOf: 2 },
-      air: { lowerBound: 1, upperBound: 6, multipleOf: 1 }
+      road: { lowerBound: 4, upperBound: 12, lowest: 4, highest: 12, multipleOf: 1 },
+      rail: { lowerBound: 8, upperBound: 24, lowest: 8, highest: 24, multipleOf: 2 },
+      air: { lowerBound: 1, upperBound: 6, lowest: 4 * THIRD, highest: 17 * THIRD, multipleOf: THIRD }
     };
 
     // what wasm answers: the options of the next choice, given the values already chosen. Nothing of the
-    // status, the data or the globals crosses; the token standing at the task holds all of it.
+    // status, the data or the globals crosses; the token standing at the task holds all of it. The
+    // attribute is the name the engine reports it by, which is a name and not a structure.
     const OPTIONS = (nodeId, values) => {
-      const attribute = DECLARATIONS[nodeId][values.length];
+      const attribute = DECLARATIONS[nodeId][values.length].attribute.name;
 
       if (nodeId === 'DecisionTask_1') {
         return values.length === 0
@@ -334,80 +349,63 @@
           : { attribute, ...BY_MODE[values[0]] };
       }
 
-      return { attribute, lowerBound: 1, upperBound: 5, multipleOf: 1 };
+      return { attribute, lowerBound: 1, upperBound: 5, lowest: 1, highest: 5, multipleOf: 1 };
     };
 
-    const admits = (options, value) => options.enumeration
-      ? options.enumeration.includes(value)
-      : value >= options.lowerBound && value <= options.upperBound;
-
     /*
-     * The walk the panel makes: ask for the first choice, and where the value held is still among the
-     * options, extend the prefix and ask again. Where it is not, clear it and everything after it. A choice
-     * the walk cannot reach is still shown, by its attribute alone, so the reader sees how many choices the
-     * task requires rather than only the one they may make now.
+     * The walk the panel makes is the application's own, imported rather than written again here. What this
+     * page stands in for is the run: the answers a bridge would give and the description a model would
+     * yield. A walk written twice would be two walks, and the one on this page would go on agreeing with a
+     * panel the other had stopped agreeing with, which is the failure this page exists to prevent.
      *
-     * In the application this is driven by `playback.drained`, the moment the diagram has caught up and the
+     * In the application it is driven by `playback.drained`, the moment the diagram has caught up and the
      * engine stands still; here it is driven by the store changing, which is the same thing without a run.
      */
     function walk(key) {
       const decision = decisions.get(key);
 
       if (!decision) {
-        return;
+        return Promise.resolve();
       }
 
-      const declarations = DECLARATIONS[decision.nodeId] || [],
-            held = decision.choices.map((choice) => choice.value),
-            prefix = [];
-
-      let reachable = true;
-
-      declarations.forEach((attribute, index) => {
-        if (!reachable) {
-          decisions.setOptions(key, index, { attribute });
-
-          return;
-        }
-
-        const options = OPTIONS(decision.nodeId, prefix);
-
-        decisions.setOptions(key, index, options);
-
-        const value = held[index];
-
-        if (value !== undefined && admits(options, value)) {
-          prefix.push(value);
-        } else {
-          if (value !== undefined) {
-            decisions.clearFrom(key, index);
-          }
-          reachable = false;
-        }
-      });
-
-      if (prefix.length === declarations.length) {
-        decisions.setOptions(key, declarations.length, null);
-      }
+      return walkDecision(
+        decisions,
+        decision,
+        (instanceId, nodeId, selected) => Promise.resolve(
+          selected.length >= (DECLARATIONS[nodeId] || []).length
+            ? { complete: true }
+            : OPTIONS(nodeId, selected)),
+        DECLARATIONS[decision.nodeId] || []
+      );
     }
 
     decisions.open('Instance_1', 'DecisionTask_1');
     decisions.open('Instance_2', 'DecisionTask_2');
 
-    // the walk runs again whenever the store changes, as it runs in the application whenever the diagram
-    // has caught up; the guard is because walking writes to the store it is walking
+    // The walk runs again whenever the reader chooses, which is what the application does: a choice made is
+    // exactly what makes the choices after it a different question. It is announced apart from the store
+    // merely changing, so that the walk's own writes do not set it off again.
     let walking = false;
 
-    eventBus.on('decisions.changed', () => {
+    async function walkAll() {
       if (walking) {
         return;
       }
-      walking = true;
-      decisions.all().forEach((decision) => walk(decision.key));
-      walking = false;
-    });
 
-    decisions.all().forEach((decision) => walk(decision.key));
+      walking = true;
+
+      try {
+        for (const decision of decisions.all()) {
+          await walk(decision.key);
+        }
+      } finally {
+        walking = false;
+      }
+    }
+
+    eventBus.on('decisions.selected', () => walkAll());
+
+    walkAll();
 
     const out = document.getElementById('out');
 

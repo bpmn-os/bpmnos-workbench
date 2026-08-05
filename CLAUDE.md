@@ -127,7 +127,8 @@ Key source (this repo):
   node-testable, holding per decision what the engine has answered and what the reader has entered),
   `declarations.js` (the choices a task states, read from `bpmnos:decisions` in the model),
   `DecisionEntry.js` (the task drawn with `bpmnos-js/decision-task-symbol` marked with its token, and a
-  choice as its attribute above the control that takes it), `Panel.js` (the "Decisions" tab) and
+  choice as its attribute above the control that takes it), `grid.js` (the values a bounded choice admits
+  and the arithmetic of moving among them, plain and node-testable), `Panel.js` (the "Decisions" tab) and
   `decisions.css`.
 
   Which choices a task states is model knowledge and is read from the moddle extension; what each may take
@@ -138,22 +139,51 @@ Key source (this repo):
   before evaluating the next condition. So the bridge answers one choice at a time, against the values
   already selected, and `src/manual/index.js` walks it whenever the player announces `playback.drained`,
   which in a manual run is the moment the diagram has caught up and the engine stands still. A value the
-  answer no longer admits is cleared, and everything after it with it. The player opens a decision on a
+  answer no longer admits is cleared, and everything after it with it. What a later choice answered before
+  stands until the new answer replaces it, and a position answered with what it already holds is no change
+  and announces none: the question is asked again whenever anything moves and usually has the same answer,
+  and a store that reported each of those would redraw a control the reader is working in for nothing. The player opens a decision on a
   `choiceRequest` record and closes it when its token reports any state past `BUSY`, on the same terms as a
   message that stops being awaited.
 
-  The bounds the bridge reports are already the multiples of the discretizer within the condition's bounds,
-  so a number input stepping from the minimum lands on values the engine admits; strictness and the
-  attribute's type have been resolved before they arrive. A choice not yet reachable is drawn all the same,
-  disabled, so the reader sees how many the task requires.
+  A bounded choice is answered as two pairs. The bounds the condition states arrive as `lowerBound` and
+  `upperBound`, with two corrections already made: a strict bound has been moved inward by the engine's own
+  precision, and the bounds of a choice on an attribute that is not a decimal have been raised and lowered
+  to whole numbers, which `Choice::getBounds` does because the attribute's type says so and for no other
+  reason. The values that may be selected arrive as `lowest` and `highest`, and are the multiples of the
+  step within those bounds, counted from zero as `Choice::getEnumeration` counts them. The two pairs differ
+  wherever the grid falls beside a bound, whether because the bound is not a multiple or because the engine
+  holds a fractional step slightly beside the one written, and where a reader could see that difference at
+  the precision shown they are told of it beneath the control.
+
+  A choice within bounds is therefore not an `input` of type number, and this is deliberate. Such a control
+  has one notion of a value and one grid, declared through `min` and `step` and expressed in the numbers the
+  field carries, where the grid a choice admits is counted from zero and expressed in the numbers the engine
+  holds, and a reader is shown neither but a value rounded to a precision they could have written. Asked to
+  step, the control moves the value onto its own grid before advancing, so a press is swallowed where the
+  rounded number lies just below its multiple and a value is skipped where it lies just above, and what it
+  leaves behind is the unrounded number it computed. The field is accordingly a text input marked as a spin
+  button, the walking is done in `grid.js` against the values the choice admits, and what the reader types
+  is settled on the nearest of them when they are done typing. React Aria's number field is a text field
+  with its own arrows for the same reason.
+
+  The list is not redrawn while a control is under a press. It is rebuilt from the store on every change,
+  the reader's own entry among them, and an arrow held down is a press on one element: rebuilding takes that
+  element away and the walk stops at a value nobody chose. What the store gained meanwhile is drawn when the
+  press ends. A choice not yet reachable is drawn all the same, disabled, so the reader sees how many the
+  task requires.
 - `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
   since radios of one name are one group and two tabs are alive at once.
 - `src/animation-tokens.js` — the seam between the identities this application speaks and the tokens the
   animation holds. A node is always a process rather than the pool drawn for it, and the animation reports
   that pool, so the two are translated here and nowhere else: the process a node stands for, and the
   animation's token for an identity.
-- `demo/panels.html` — the tabs a run concerns over stores fed by hand: no model, no mode, no console, and
-  nothing of it under `src/`. It is where a panel is designed and reviewed before it is wired to a run.
+- `demo/panels.html` — the tabs a run concerns over stores fed by hand: no model, no mode, no console. What
+  it stands in for is the run — the answers a bridge would give and the description a model would yield —
+  and everything else is the application's own, imported from `src/`, the panels and the stores and the walk
+  alike. Anything written twice is two things, and the copy on this page would go on agreeing with a panel
+  the original had stopped agreeing with, which is the failure this page exists to prevent. It is where a
+  panel is designed and reviewed before it is wired to a run.
 - `src/token-rows/` — the `tokenRows` service: a token drawn as the Tokens tab draws it, wherever a panel
   asks something of the reader about it. The row is `createTokenEntry` given what the token panel gives its
   own rows, so a token reads the same everywhere; a panel adds a control the row carries and, later, a

@@ -28,6 +28,8 @@ export default function DecisionsPanel(injector, eventBus, decisions, config) {
   this._inspector = null;
   this._open = new Map(); // which rows a reader has expanded, kept as the list is drawn again
   this._filter = 'all';
+  this._pressed = false;  // a control is under a press, so the list is left alone until it ends
+  this._deferred = false; // the store changed while it was, and is to be drawn once it does
 
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('decisions.changed', () => this._render());
@@ -89,6 +91,32 @@ DecisionsPanel.prototype._build = function() {
 
   this._inspector = document.createElement('div');
   this._inspector.className = 'bjs-token-inspector';
+
+  // While a control is under a press — a spinner held down, an arrow key held down — the list is left
+  // alone, and what the store gained is drawn when the press ends. The listeners are on the region rather
+  // than on a control, since a control does not survive a redraw and this region does.
+  const press = (pressed) => {
+    this._pressed = pressed;
+
+    if (!pressed && this._deferred) {
+      this._render();
+    }
+  };
+
+  this._inspector.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('.wb-choice-control')) {
+      press(true);
+    }
+  });
+
+  this._inspector.addEventListener('keydown', (event) => {
+    if (event.target.closest('.wb-choice-control') && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      press(true);
+    }
+  });
+
+  this._inspector.addEventListener('keyup', () => press(false));
+  window.addEventListener('pointerup', () => press(false));
 
   root.appendChild(heading);
   root.appendChild(this._inspector);
@@ -169,6 +197,20 @@ DecisionsPanel.prototype._render = function() {
   if (!this._inspector) {
     return;
   }
+
+  // A control the reader is operating is not drawn again while they operate it. The list is rebuilt from
+  // the store on every change, the reader's own entry among them, and a spinner held down is a press on one
+  // element: rebuilding takes that element away mid-press, so the arrow stops wherever the rebuild caught
+  // it and the value stands somewhere between the one the reader started from and the one they were going
+  // to. What the store gained in the meantime is drawn once the press ends, which is the first moment the
+  // reader can read it in any case.
+  if (this._pressed) {
+    this._deferred = true;
+
+    return;
+  }
+
+  this._deferred = false;
 
   const writing = this._writing();
 

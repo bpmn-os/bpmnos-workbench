@@ -58,6 +58,67 @@
   border-color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
 }
 
+/* The field of a bounded choice, holding the arrows that walk the values it admits. They are the panel's
+   own: the field is text rather than a number, since a number input walks a grid of its own and would show
+   the reader a value nobody chose. */
+.wb-choice-field {
+  position: relative;
+}
+
+.wb-choice-field-walkable .wb-choice-control {
+  padding-right: 18px;
+}
+
+.wb-choice-arrow {
+  position: absolute;
+  right: 1px;
+  width: 16px;
+  height: calc(50% - 1px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
+  cursor: pointer;
+}
+
+.wb-choice-arrow-up {
+  top: 1px;
+}
+
+.wb-choice-arrow-down {
+  bottom: 1px;
+}
+
+/* the head of the arrow, drawn as a corner so that the pair is one shape and its mirror */
+.wb-choice-arrow::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-left: 1px solid currentColor;
+  border-top: 1px solid currentColor;
+}
+
+.wb-choice-arrow-up::before {
+  transform: translate(-50%, -25%) rotate(45deg);
+}
+
+.wb-choice-arrow-down::before {
+  transform: translate(-50%, -75%) rotate(-135deg);
+}
+
+.wb-choice-arrow:hover:not(:disabled) {
+  color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
+/* an end of the grid, or a choice that cannot yet be made: the arrow keeps its place and offers nothing */
+.wb-choice-arrow:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
 /* A choice whose options are not yet known is one the reader cannot yet make, the choices before it not
    having been made. It is drawn all the same, so that the reader sees how many choices there are. */
 .wb-choice-control:disabled {
@@ -80,4 +141,14 @@
 .wb-submit:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+/* What the reader is told about a bound the choice cannot offer. It sits under the control it concerns and
+   reads as an aside rather than as a fault: the model is sound and the engine simply cannot hold the step
+   exactly. */
+.wb-choice-note {
+  padding-top: 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
 }

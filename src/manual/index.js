@@ -1,6 +1,5 @@
 import EngineRunner from '../engine/EngineRunner.js';
 import createInput from '../input/index.js';
-import choicesOf from '../decisions/declarations.js';
 import walk from '../decisions/walk.js';
 
 /*
@@ -95,24 +94,28 @@ export default function createManual(modeler, clock) {
   }
 
   // What the model resolves rather than what a run does: which nodes perform sequentially and which
-  // activities each performs. No record says it, and it is the same for every run of the model, so it is
-  // asked once a run is about to start, which is when the lookup tables a model references are in and it
-  // can be built. A panel that reads it holds it; a host without one is told nothing.
+  // activities each performs, and which choices each decision task states. No record says either, and both
+  // are the same for every run of the model, so they are asked once a run is about to start, which is when
+  // the lookup tables a model references are in and it can be built. A panel that reads it holds it; a host
+  // without one is told nothing.
   async function describe() {
     const sequences = modeler.get('sequences', false);
-
-    if (!sequences) {
-      return;
-    }
 
     try {
       const described = await runner.describe();
 
-      sequences.setModel(described.sequentialPerformers || []);
+      if (sequences) {
+        sequences.setModel(described.sequentialPerformers || []);
+      }
+
+      stated = new Map((described.decisions || []).map((task) => [ task.node, task.choices || [] ]));
     } catch (err) {
       console.error('[manual] the model could not be described:', err);
     }
   }
+
+  // The choices each decision task states, by the node stating them, as the model resolved them.
+  let stated = new Map();
 
   // The engine has run itself out. What it produced last is still being played, so the stream is closed
   // rather than stopped: the player finishes what it holds and ends by itself, and the diagram shows the
@@ -216,14 +219,8 @@ export default function createManual(modeler, clock) {
       decisions,
       decision,
       (instanceId, nodeId, selected) => runner.choiceCandidates(instanceId, nodeId, selected),
-      choicesOf(nodeOf(decision.nodeId)).map((choice) => choice.name)
+      stated.get(decision.nodeId) || []
     );
-  }
-
-  function nodeOf(nodeId) {
-    const element = modeler.get('elementRegistry', false).get(nodeId);
-
-    return element && element.businessObject;
   }
 
   // Everything the user decides reaches the engine here, named rather than typed: a clock tick, a message

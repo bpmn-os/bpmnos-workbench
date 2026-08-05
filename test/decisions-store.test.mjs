@@ -3,14 +3,17 @@
 // The store holds what a run has been asked and what a reader has answered, and it is plain: it obtains no
 // options of its own, since only an engine standing at the token can evaluate a condition. So what is
 // covered here is what it does with the answers it is given — that a choice is opened and closed, that a
-// value entered drops what was answered after it, that a later value survives a re-answer only while the
-// options still admit it, and that a decision is submittable exactly when every choice has a value.
+// value entered leaves the answers after it standing until they are asked again, that a later value
+// survives a re-answer only while the options still admit it, that answering a position with what it
+// already holds is no change, and that a decision is submittable exactly when every choice has a value.
+//
+// Which choices a task states is no longer read here. It is model knowledge, and `describeModel` reports
+// it, the engine having settled it when it built each choice.
 
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
 import DecisionStore, { keyOf } from '../src/decisions/Store.js';
-import choicesOf, { attributeOf } from '../src/decisions/declarations.js';
 
 const KEY = keyOf('Instance_1', 'DecisionTask_1');
 
@@ -62,7 +65,7 @@ describe('the decision store', () => {
     assert.deepEqual(store.values(KEY), []);
   });
 
-  it('drops what was answered after a value that changes, but keeps the choice', () => {
+  it('leaves what was answered after a value that changes standing until it is asked again', () => {
     const store = opened();
 
     store.setOptions(KEY, 0, { attribute: 'mode', enumeration: [ 'road', 'rail' ] });
@@ -74,11 +77,32 @@ describe('the decision store', () => {
 
     store.setValue(KEY, 0, 'rail');
 
-    // what the second choice may take was answered for a prefix that no longer holds, so its options and
-    // its value are given up — but the task still states it, so the choice itself remains
+    // What the second choice may take was answered for a prefix that no longer holds and is asked again.
+    // Until the answer arrives the old one stands: taking it away would say the choice cannot be made,
+    // which is not so, and would say it for as long as the question takes to answer.
     assert.equal(store.get(KEY).choices.length, 2, 'the choice is still stated');
-    assert.deepEqual(store.get(KEY).choices[1], { attribute: 'duration' }, 'reduced to what it is of');
-    assert.deepEqual(store.values(KEY), [ 'rail' ]);
+    assert.equal(store.get(KEY).choices[1].upperBound, 12, 'and what it answered before still stands');
+    assert.equal(store.get(KEY).choices[1].value, 8);
+    assert.equal(store.get(KEY).complete, false, 'but the decision is not submittable while it is stale');
+  });
+
+  it('reports no change where a position is answered with what it already holds', () => {
+    const store = opened();
+
+    const answer = { attribute: 'duration', lowerBound: 4, upperBound: 12, lowest: 4, highest: 12,
+      multipleOf: 1 };
+
+    assert.equal(store.setOptions(KEY, 0, answer), true);
+    assert.equal(store.setOptions(KEY, 0, { ...answer }), false, 'the same answer says nothing new');
+    assert.equal(store.setOptions(KEY, 0, { ...answer, highest: 11 }), true, 'a different one does');
+  });
+
+  it('reports no change where an enumeration is answered with the same values', () => {
+    const store = opened();
+
+    assert.equal(store.setOptions(KEY, 0, { attribute: 'mode', enumeration: [ 'road', 'rail' ] }), true);
+    assert.equal(store.setOptions(KEY, 0, { attribute: 'mode', enumeration: [ 'road', 'rail' ] }), false);
+    assert.equal(store.setOptions(KEY, 0, { attribute: 'mode', enumeration: [ 'road' ] }), true);
   });
 
   it('keeps a choice not yet made when the one above it is answered', () => {
@@ -185,50 +209,5 @@ describe('the decision store', () => {
     assert.equal(store.clear(), true);
     assert.equal(store.clear(), false);
     assert.deepEqual(store.all(), []);
-  });
-});
-
-describe('the choices a decision task states', () => {
-
-  it('reads the attribute of an enumeration, written either way', () => {
-    assert.equal(attributeOf('choice ∈ [-4, 3, x, 5]'), 'choice');
-    assert.equal(attributeOf('wait_type in ["wait", "break"]'), 'wait_type');
-  });
-
-  it('reads the attribute of a pair of bounds, strict or not', () => {
-    assert.equal(attributeOf('1 <= index <= count(destinations)'), 'index');
-    assert.equal(attributeOf('min < choice <= max'), 'choice');
-    assert.equal(attributeOf('base <= level <= base + 4, 2 | level'), 'level');
-  });
-
-  it('reads nothing where the condition states neither', () => {
-    assert.equal(attributeOf('x > 3'), null, 'the engine supports no such condition either');
-    assert.equal(attributeOf('x < 10'), null, 'one-sided bounds are refused by the engine');
-    assert.equal(attributeOf(''), null);
-    assert.equal(attributeOf(undefined), null);
-  });
-
-  it('reads the choices of a node in the order they are made', () => {
-    const businessObject = {
-      extensionElements: {
-        values: [
-          { $type: 'bpmnos:Status', decisions: [ { decision: [
-            { id: 'Decision_1', condition: 'base ∈ [2, 5]' },
-            { id: 'Decision_2', condition: 'base <= level <= base + 4, 2 | level' }
-          ] } ] }
-        ]
-      }
-    };
-
-    assert.deepEqual(choicesOf(businessObject), [
-      { id: 'Decision_1', name: 'base' },
-      { id: 'Decision_2', name: 'level' }
-    ]);
-  });
-
-  it('reads no choices from a node that states none', () => {
-    assert.deepEqual(choicesOf({}), []);
-    assert.deepEqual(choicesOf({ extensionElements: { values: [] } }), []);
-    assert.deepEqual(choicesOf(null), []);
   });
 });
