@@ -17,7 +17,6 @@
    body's, so it is given back here rather than taken away there. */
 .wb-message-tokens {
   margin-left: calc(-1 * var(--bjs-entry-inset, 12px));
-  margin-right: -4px;
 }
 
 /* the title reads as the header and the contents beside it: their colour is the panel's own, where a list

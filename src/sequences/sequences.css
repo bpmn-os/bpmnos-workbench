@@ -43,12 +43,12 @@
    separates the rows without competing with them. It is given the height of the reorder strip, which is the
    height every other row of the list has, so that its words sit on the midpoint between the arrows beside
    them rather than at the top of a shorter row. */
-.wb-performer-divider .bjs-simple-entry-row {
+.wb-performer-divider {
   min-height: 36px;
+  align-items: center;
 }
 
-.wb-performer-divider .bjs-simple-entry-title {
+.wb-performer-divider .bjs-simple-entry-content {
   font-style: italic;
   color: var(--bjs-grey-55, hsl(225, 10%, 55%));
-  white-space: normal;
 }

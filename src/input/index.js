@@ -18,8 +18,9 @@ import './input.css';
  *
  * The grids own the content: the model supplies each table's header (columns) so a grid shows its header
  * even for a brand-new model with no file yet, and the user can type rows straight in — no file needed.
- * A load icon fills a grid from a CSV (validating its header), a download icon exports it; both live in
- * the grid footer next to the add-row button.
+ * A grid owns its file too, saving and loading a CSV from its own footer, so what this module adds is only
+ * what the model knows: which columns a source declares, and a place to say so when a loaded file names
+ * others.
  *
  * @param {import('bpmn-js/lib/Modeler').default} modeler
  * @param {import('../engine/EngineRunner.js').default} runner  asked which lookup tables the model needs
@@ -121,39 +122,6 @@ export default function createInput(modeler, runner) {
       .catch(err => renderError(String((err && err.message) || err)));
   }
 
-  // Run is enabled once the instance grid has at least one row — an empty instance has nothing to
-  // simulate. Referenced lookups may be left empty (a table only matters if the model looks it up at run).
-  function ready() {
-    return !!instanceField && instanceField.rowCount() > 0;
-  }
-
-  // (Re)register the log source with the transport: offered once the input is ready, withdrawn otherwise.
-  // Any prior run is now stale, so drop the cache — the next play runs the engine afresh.
-  function syncSource() {
-    cachedLog = null;
-    playback.setLogSource(ready() ? produceLog : null);
-  }
-
-  // The log source: yields the current run's log, running the engine (with the current seed) on first
-  // demand and caching it, so play/pause/resume/stop replay one deterministic run. Each grid is serialised
-  // on demand, so the engine always sees what's currently typed in. Consulted only on an idle→start.
-  async function produceLog() {
-    if (cachedLog) {
-      return cachedLog;
-    }
-    try {
-      for (const [ name, field ] of Object.entries(lookupFields)) {
-        runner.setLookup(name, field.getCsv());
-      }
-      const result = await runner.run(instanceField.getCsv(), seed);
-      cachedLog = result.log;
-      return cachedLog;
-    } catch (err) {
-      console.error('[greedy] run failed:', err);
-      return []; // empty → the play button no-ops; the next play retries
-    }
-  }
-
   // --- rendering (into the collapsible entry's body, in the side panel's design system) ---------------
 
   function reset() {
@@ -207,17 +175,18 @@ export default function createInput(modeler, runner) {
   }
 
   // One table field: a nested (caret-left) collapsible labelled by the source name, holding the editable
-  // grid. The grid owns the content and starts empty (header only); a load icon fills it from a CSV, a
-  // download icon exports it — both in the grid footer, left of / with the add-row button.
+  // grid. The grid owns its content and its file — a table is rows under named columns, which is a CSV, so
+  // saving one and loading one are the table's own controls in its footer. What is left here is what only
+  // this panel knows: which columns the model declares for this source, and where to say so when a loaded
+  // file names others. A file so refused leaves the table as it was, and the complaint stands until
+  // something changes, an edit included, since the message is about a file and not about the rows.
   function makeTableField({ label, filename, columns }) {
     const collapsible = createCollapsibleEntry({ id: 'wb-input-' + label, label, open: true, caretSide: 'left' });
 
     const gridHost = domify('<div></div>');
     const error = domify('<div class="wb-input-error" hidden></div>'); // shown only after a header mismatch
-    const fileInput = domify('<input type="file" accept=".csv,text/csv" hidden/>');
     collapsible.contentEl.appendChild(gridHost);
     collapsible.contentEl.appendChild(error);
-    collapsible.contentEl.appendChild(fileInput);
 
     let cols = columns.slice();
     let table = null;
@@ -228,62 +197,21 @@ export default function createInput(modeler, runner) {
         columns: cols,
         rows: rows || [],
         maxHeight: GRID_MAX_HEIGHT, // ~10 rows under the fixed header, then scroll
-        onChange: changed
+        filename,
+        onChange: () => { error.hidden = true; changed(); },
+        onError: (message) => { error.hidden = false; error.textContent = message; }
       });
-      const load = iconButton(LOAD_ICON, 'Load ' + filename, () => fileInput.click());
-      const download = iconButton(SAVE_ICON, 'Download ' + filename, doDownload);
-      table.footerEl.append(load, download); // load left of download, in the footer's right slot
       gridHost.appendChild(table.element);
     }
-
-    function doDownload() {
-      const blob = new Blob([ serialize(cols, table.getRows()) ], { type: 'text/csv' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }
-
-    // Load a CSV: validate its header against the model's declared columns (trimmed, case-insensitive),
-    // then load the rows keeping the model's column names. The engine ignores the CSV header (positional),
-    // but we still check it so a wrong file is caught here rather than failing cryptically at run time.
-    domEvent.bind(fileInput, 'change', () => {
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) {
-        return;
-      }
-      file.text().then(text => {
-        const parsed = parseCsv(text);
-        if (!headersMatch(parsed.header, cols)) {
-          error.hidden = false;
-          error.textContent = 'Unexpected header in ' + file.name;
-          return;
-        }
-        error.hidden = true;
-        table.setRows(parsed.rows);
-        changed();
-      });
-      fileInput.value = '';
-    });
 
     build([]);
 
     return {
       element: collapsible.element,
-      getCsv: () => serialize(cols, table.getRows()),
+      getCsv: () => table.getCsv(),
       rowCount: () => table.getRows().filter(row => !isEmptyRow(row)).length // ignore blank rows for "ready"
     };
   }
-
-  function iconButton(svg, title, onClick) {
-    const btn = domify('<button type="button"></button>');
-    btn.title = title;
-    btn.innerHTML = svg;
-    domEvent.bind(btn, 'click', onClick);
-    return btn;
-  }
-
 
   return {
     element: entry.element,
@@ -305,38 +233,9 @@ const INSTANCE_COLUMNS = [
 // grid height cap: ~10 rows under the fixed header, then scroll
 const GRID_MAX_HEIGHT = 'calc(10 * var(--bjs-table-row-h, 27px))';
 
-// instance/lookup CSV is ';'-delimited, cells verbatim (commas/quotes/expressions kept as-is)
-function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
-  return {
-    header: (lines[0] || '').split(';').map(s => s.trim()),
-    rows: lines.slice(1).map(l => l.split(';').map(s => s.trim()))
-  };
-}
-
 // a row is empty (ignored on download and when feeding the engine) if every cell is blank/whitespace
 function isEmptyRow(row) {
   return !row.some(cell => String(cell).trim() !== '');
 }
 
-function serialize(columns, rows) {
-  const filled = rows.filter(row => !isEmptyRow(row));
-  return [ columns.join('; ') ].concat(filled.map(r => r.join(';'))).join('\n');
-}
 
-// header matches iff same column count and each name equal after trimming, case-insensitively
-function headersMatch(fileHeader, expected) {
-  return fileHeader.length === expected.length &&
-    fileHeader.every((h, i) => h.trim().toLowerCase() === String(expected[i]).trim().toLowerCase());
-}
-
-// footer icons (feather-style): load = upload-into-tray, download = save-from-tray
-const LOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
-  '<polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
-
-const SAVE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
-  '<polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';

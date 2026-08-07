@@ -463,7 +463,7 @@ SequencesPanel.prototype._applyNote = function() {
 
 /** The divider: a row of the list like any other, saying what standing above it means. */
 function divider() {
-  const entry = createSimpleEntry({ label: DIVIDER_LABEL });
+  const entry = createSimpleEntry({ content: DIVIDER_LABEL });
 
   entry.element.classList.add('wb-performer-divider');
 
