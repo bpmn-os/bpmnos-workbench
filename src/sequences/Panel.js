@@ -1,5 +1,5 @@
 import {
-  createCollapsibleEntry, createOrderedListEntry, createSimpleEntry, DELETE_SVG
+  createCollapsibleEntry, createOrderedListEntry, createSimpleEntry, DELETE_ICON
 } from 'bpmn-js-side-panel';
 
 import { processOf, tokenAt } from '../animation-tokens.js';
@@ -423,7 +423,7 @@ SequencesPanel.prototype._forget = function(performer, key) {
   button.type = 'button';
   button.className = 'bjs-collapsible-entry-control wb-forget';
   button.title = 'Forget this token';
-  button.innerHTML = DELETE_SVG;
+  button.innerHTML = DELETE_ICON;
   button.addEventListener('click', () => this._sequences.forget(performer.key, key));
 
   return button;

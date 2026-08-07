@@ -12,17 +12,9 @@
   color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
 }
 
-/* A token row is a row of the panel wherever it is shown, so the tokens of a message span the entry rather
-   than sitting within the inset its header and its contents are written in. That inset is the message
-   body's, so it is given back here rather than taken away there. */
-.wb-message-tokens {
-  margin-left: calc(-1 * var(--bjs-entry-inset, 12px));
-}
-
 /* the title reads as the header and the contents beside it: their colour is the panel's own, where a list
    title in the Tokens tab is greyed */
 .wb-message-tokens > .bjs-token-list-title {
-  padding-left: var(--bjs-entry-inset, 12px);
   color: inherit;
 }
 
