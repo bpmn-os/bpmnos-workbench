@@ -1,5 +1,6 @@
 import EngineRunner from '../engine/EngineRunner.js';
 import createInput from '../input/index.js';
+import mountInputTabs from '../input/tabs.js';
 
 /*
  * createGreedy — the greedy-simulation source. It owns a Web Worker running the BPMN-OS wasm engine
@@ -25,7 +26,7 @@ export default function createGreedy(modeler) {
   const runner = new EngineRunner();
 
   let input = null;         // the input provider, while active
-  let controlHandle = null; // handle from tokenPanel.addControl (removes the entry on deactivate)
+  let inputTabs = null;     // the columns the input stands in, taken away on deactivate
   let seed = newSeed();     // caller-owned engine seed; Refresh re-rolls it
   let cachedLog = null;     // the current run's log (reproducible replay until Refresh / inputs change)
 
@@ -39,7 +40,8 @@ export default function createGreedy(modeler) {
     }
     input = createInput(modeler, runner);
     input.onChange(syncSource);
-    controlHandle = tokenPanel.addControl(input.element); // below auto-focus, in the controls region
+    // what the run is given stands in columns of its own, right of what a run produces
+    inputTabs = mountInputTabs(modeler, input);
     input.load();
   }
 
@@ -47,9 +49,9 @@ export default function createGreedy(modeler) {
     playback.stop();
     playback.setLogSource(null); // stop offering greedy runs to the transport
     cachedLog = null;
-    if (controlHandle) {
-      controlHandle.remove();
-      controlHandle = null;
+    if (inputTabs) {
+      inputTabs.remove();
+      inputTabs = null;
     }
     if (input) {
       input.destroy();

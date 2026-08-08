@@ -3,18 +3,22 @@ import {
   event as domEvent
 } from 'min-dom';
 
-import { createCollapsibleEntry, createTableEntry } from 'bpmn-js-side-panel';
+import { createTableEntry } from 'bpmn-js-side-panel';
 
 import './input.css';
 
 /*
  * createInput — what a run is given: the model, the lookup tables it references, and the instance data.
  *
- * The provider owns the grids and nothing else. It renders an "Input" entry — the instance table and one
- * table per lookup the model references, each editable in place (bpmn-js-side-panel's table entry) — and
- * hands the element back for a host to mount. It knows neither who runs nor where it is shown, so the same
- * provider serves a greedy run and a manual one, in the Tokens tab today and, should the interface move it,
- * in an overlay asked before a run starts.
+ * The provider owns the grids and nothing else. It builds the instance table and one table per lookup the
+ * model references, each editable in place (bpmn-js-side-panel's table entry), and hands them back one at a
+ * time for a host to mount where it likes. It knows neither who runs nor where its tables are shown, so the
+ * same provider serves a greedy run and a manual one, in a tab apiece today and, should the interface move
+ * them, in an overlay asked before a run starts.
+ *
+ * Each table says what it is: a key the host may hold it under, the name it is known by, and the file it was
+ * read from, which is the source the model declares for a lookup, the name of a file the reader has loaded,
+ * or nothing at all.
  *
  * The grids own the content: the model supplies each table's header (columns) so a grid shows its header
  * even for a brand-new model with no file yet, and the user can type rows straight in — no file needed.
@@ -35,11 +39,12 @@ import './input.css';
  * }}
  */
 export default function createInput(modeler, runner) {
-  const entry = createCollapsibleEntry({ id: 'wb-input', label: 'Input', open: true });
-  const body = entry.contentEl;
+  let tables = [];          // what the model asks for, in the order a host is to show it
+  let tableListeners = [];  // called whenever that set changes, which is whenever a model is read
 
-  let lastXml = '';         // the current model XML (for deriving lookup columns)
+  let error = null;         // why the model could not be read, if it could not
   let sources = {};         // lookup-table name -> its `source` filename as declared in the BPMN XML
+  let functions = {};       // `source` filename -> the `name` the model looks that table up through
   let headers = {};         // lookup-table name -> its declared `header` (semicolon-separated column names)
   let instanceField = null; // the instance grid field
   let lookupFields = {};    // lookup-table name -> its grid field
@@ -51,6 +56,23 @@ export default function createInput(modeler, runner) {
 
   function onChange(listener) {
     listeners.push(listener);
+  }
+
+  /** The tables the model asks for, instance first. A host mounts each where it wants it. */
+  function getTables() {
+    return tables.slice();
+  }
+
+  /**
+   * Called whenever the set of tables changes, which is whenever a model is read: a host that shows them
+   * mounts the new set and forgets the old, the lookups being a property of the model.
+   */
+  function onTables(listener) {
+    tableListeners.push(listener);
+  }
+
+  function tablesChanged() {
+    tableListeners.forEach((listener) => listener(getTables()));
   }
 
   // Run is enabled once the instance grid has at least one row — an empty instance has nothing to
@@ -71,7 +93,9 @@ export default function createInput(modeler, runner) {
 
   function destroy() {
     listeners = [];
-    entry.destroy();
+    tableListeners = [];
+    tables.forEach((table) => table.element.remove());
+    tables = [];
   }
 
   // Map each lookup table's `name` (the engine key) to its `source` filename as declared in the BPMN XML
@@ -110,11 +134,13 @@ export default function createInput(modeler, runner) {
   // of grids (instance + one per lookup). Run when the provider is mounted and again whenever a new model
   // is imported. A load is a change like any other, so a host learns of it through `onChange`.
   function load() {
-    renderLoading();
     modeler.saveXML({ format: false })
       .then(({ xml }) => {
-        lastXml = xml;
         sources = tableSources(xml); // name -> source filename, for labelling the grids
+        // The function a lookup is read through, by the file it is read from: the engine reports a lookup by
+        // its file, and the model declares the name beside it, so this is the map above read backwards
+        // rather than the same XML parsed again.
+        functions = Object.fromEntries(Object.entries(sources).map(([ name, source ]) => [ source, name ]));
         headers = tableHeaders(xml); // name -> declared column header, for the grid columns
         return runner.loadModel(xml);
       })
@@ -122,55 +148,55 @@ export default function createInput(modeler, runner) {
       .catch(err => renderError(String((err && err.message) || err)));
   }
 
-  // --- rendering (into the collapsible entry's body, in the side panel's design system) ---------------
+  // --- the tables (bpmn-js-side-panel's table entry, in its design system) ----------------------------
 
   function reset() {
-    body.innerHTML = '';
+    tables.forEach((table) => table.element.remove());
+    tables = [];
     instanceField = null;
     lookupFields = {};
   }
 
-  function hint(text) {
-    const el = domify('<div class="wb-input-hint"></div>');
-    el.textContent = text;
-    return el;
-  }
-
-  function renderLoading() {
-    reset();
-    body.appendChild(hint('Reading the model…'));
-  }
-
+  // A model that cannot be read leaves no tables, and the message goes where a host shows it: there is
+  // nothing to show a grid of, and a grid of nothing would say the model was read and empty.
   function renderError(message) {
     reset();
-    const err = domify('<div class="wb-input-error"></div>');
-    err.textContent = message;
-    body.appendChild(err);
+    error = message;
+    tablesChanged();
   }
 
   function renderForm(required) {
     reset();
+    error = null;
 
     instanceField = makeTableField({
-      label: 'Instance',
+      key: 'instance',
+      name: 'Instance',
       filename: 'instance.csv',
+      source: null,               // the instance table is the one the model names no file for
       columns: INSTANCE_COLUMNS
     });
-    body.appendChild(instanceField.element);
 
     for (const name of required) {
       const source = sources[name] || name;
       // columns come straight from the table's declared `header` (semicolon-separated column names)
       const columns = (headers[name] || '').split(';').map(c => c.trim()).filter(Boolean);
-      const field = makeTableField({
-        label: source,
+
+      // A lookup is known by the function an expression reads it through and is read from a file, so it is
+      // named by the one and says the other. A model that declares no name for it has only the file, and
+      // then the file is all there is to call it by.
+      const fn = functions[name];
+
+      lookupFields[name] = makeTableField({
+        key: 'lookup:' + name,
+        name: fn ? fn + '(…)' : source,
         filename: source,
+        source,                    // a lookup is read from the file the model declares
         columns
       });
-      lookupFields[name] = field;
-      body.appendChild(field.element);
     }
 
+    tablesChanged();
     changed();
   }
 
@@ -180,42 +206,44 @@ export default function createInput(modeler, runner) {
   // this panel knows: which columns the model declares for this source, and where to say so when a loaded
   // file names others. A file so refused leaves the table as it was, and the complaint stands until
   // something changes, an edit included, since the message is about a file and not about the rows.
-  function makeTableField({ label, filename, columns }) {
-    const collapsible = createCollapsibleEntry({ id: 'wb-input-' + label, label, open: true, caretSide: 'left' });
+  function makeTableField({ key, name, filename, source, columns }) {
+    const element = domify('<div></div>');
+    const complaint = domify('<div class="wb-input-error" hidden></div>'); // shown after a header mismatch
 
-    const gridHost = domify('<div></div>');
-    const error = domify('<div class="wb-input-error" hidden></div>'); // shown only after a header mismatch
-    collapsible.contentEl.appendChild(gridHost);
-    collapsible.contentEl.appendChild(error);
+    const table = createTableEntry({
+      columns: columns.slice(),
+      rows: [],
+      // No cap: the table stands alone in its column, so it is as tall as its rows and the column scrolls.
+      // A cap would put a scrollbar inside a scrollbar and leave the column half empty whenever the window
+      // is tall.
+      filename,
+      onChange: () => { complaint.hidden = true; changed(); },
+      onLoad: (loaded) => { field.source = loaded; tablesChanged(); },
+      onError: (message) => { complaint.hidden = false; complaint.textContent = message; }
+    });
 
-    let cols = columns.slice();
-    let table = null;
+    element.appendChild(table.element);
+    element.appendChild(complaint);
 
-    function build(rows) {
-      gridHost.innerHTML = '';
-      table = createTableEntry({
-        columns: cols,
-        rows: rows || [],
-        maxHeight: GRID_MAX_HEIGHT, // ~10 rows under the fixed header, then scroll
-        filename,
-        onChange: () => { error.hidden = true; changed(); },
-        onError: (message) => { error.hidden = false; error.textContent = message; }
-      });
-      gridHost.appendChild(table.element);
-    }
-
-    build([]);
-
-    return {
-      element: collapsible.element,
+    const field = {
+      key,
+      name,
+      source,
+      element,
       getCsv: () => table.getCsv(),
       rowCount: () => table.getRows().filter(row => !isEmptyRow(row)).length // ignore blank rows for "ready"
     };
+
+    tables.push(field);
+
+    return field;
   }
 
   return {
-    element: entry.element,
     load,
+    getTables,
+    onTables,
+    getError: () => error,
     ready,
     getInstances,
     getLookups,
@@ -229,9 +257,6 @@ export default function createInput(modeler, runner) {
 const INSTANCE_COLUMNS = [
   'INSTANCE_ID', 'NODE_ID', 'INITIALIZATION', 'DISCLOSURE', 'READY', 'COMPLETION'
 ];
-
-// grid height cap: ~10 rows under the fixed header, then scroll
-const GRID_MAX_HEIGHT = 'calc(10 * var(--bjs-table-row-h, 27px))';
 
 // a row is empty (ignored on download and when feeding the engine) if every cell is blank/whitespace
 function isEmptyRow(row) {

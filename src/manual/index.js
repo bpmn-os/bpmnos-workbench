@@ -1,5 +1,6 @@
 import EngineRunner from '../engine/EngineRunner.js';
 import createInput from '../input/index.js';
+import mountInputTabs from '../input/tabs.js';
 import walk from '../decisions/walk.js';
 
 /*
@@ -29,7 +30,7 @@ export default function createManual(modeler, clock) {
   const runner = new EngineRunner();
 
   let input = null;         // the input provider, while active
-  let controlHandle = null; // handle from tokenPanel.addControl
+  let inputTabs = null;     // the columns the input stands in, taken away on deactivate
   let running = false;      // a run has begun and has not been ended
   let stalled = false;      // the engine is alive and can fetch no event: it waits for the user
   let drained = false;      // the diagram shows everything the engine has produced so far
@@ -43,15 +44,16 @@ export default function createManual(modeler, clock) {
     }
     input = createInput(modeler, runner);
     input.onChange(syncSource);
-    controlHandle = tokenPanel.addControl(input.element);
+    // what the run is given stands in columns of its own, right of what a run produces
+    inputTabs = mountInputTabs(modeler, input);
     input.load();
   }
 
   function deactivate() {
     abandon();
-    if (controlHandle) {
-      controlHandle.remove();
-      controlHandle = null;
+    if (inputTabs) {
+      inputTabs.remove();
+      inputTabs = null;
     }
     if (input) {
       input.destroy();

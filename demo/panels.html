@@ -255,7 +255,17 @@
     const PANES = { messages: 'pane-messages', decisions: 'pane-decisions' };
 
     const sidePanel = {
-      addTab: ({ id }) => ({ body: document.getElementById(PANES[id] || 'pane') }),
+      // the panel hands back a tab's three slots; this page mounts the body where it wants it and gives the
+      // band a place of its own above it, as the side panel does
+      addTab: ({ id }) => {
+        const body = document.getElementById(PANES[id] || 'pane'),
+              header = document.createElement('div');
+
+        header.className = 'bjs-tab-header';
+        body.parentNode.insertBefore(header, body);
+
+        return { header, body };
+      },
       setNote() {}
     };
 

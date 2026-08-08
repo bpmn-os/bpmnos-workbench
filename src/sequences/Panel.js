@@ -11,6 +11,10 @@ import createPerformerEntry from './PerformerEntry.js';
 /** What the divider says it does, which is the whole of what the order means. */
 const DIVIDER_LABEL = 'Tokens above enter activity automatically';
 
+// The key the keeping stands under in a performer's list. It is no token, so it is named rather than keyed
+// by one, and the ordered list holds it fixed at the head where it takes no part in the order.
+const KEEP = '\u0000keep';
+
 /**
  * The Sequences tab: the sequential performers of a run, and the order each is to work through.
  *
@@ -56,12 +60,13 @@ SequencesPanel.prototype._init = function() {
     return; // no side panel, or the tab is up already
   }
 
-  const { body } = sidePanel.addTab({
+  const { header, body } = sidePanel.addTab({
     id: 'sequences',
     label: this._config.label || 'Sequences',
     priority: this._config.priority != null ? this._config.priority : -2
   });
 
+  this._band = header;
   this._body = body;
   this._build();
   this._render();
@@ -81,10 +86,10 @@ SequencesPanel.prototype._build = function() {
 
   heading.className = 'bjs-token-list-title bjs-token-filter';
 
-  const title = document.createElement('span');
+  const name = document.createElement('h1');
 
-  title.textContent = 'Performers';
-  heading.appendChild(title);
+  name.className = 'bjs-tab-name';
+  name.textContent = this._config.label || 'Sequences';   // the band names the tab
 
   // The filter says which performers are listed and nothing about what a listed one shows. A performer's
   // list is an order, and an order shown in part is no order: an arrow would move a token past neighbours
@@ -103,17 +108,7 @@ SequencesPanel.prototype._build = function() {
   this._inspector = document.createElement('div');
   this._inspector.className = 'bjs-token-inspector';
 
-  // What a performer has done stays in its list, greyed, so that the reader can recap the order it worked
-  // in. What the switch governs is the keeping: turning it off forgets what is held and what leaves
-  // thereafter, and turning it on begins the record from that moment rather than restoring what was not
-  // kept. It is the bar the Tokens tab gives auto-focus, in the same classes, so the two read as one panel.
-  const controls = document.createElement('div');
-
-  controls.className = 'bjs-token-controls';
-  controls.appendChild(this._keepArchived());
-
-  root.appendChild(controls);
-  root.appendChild(heading);
+  this._band.append(name, heading);
   root.appendChild(this._inspector);
 
   this._body.appendChild(root);
@@ -177,19 +172,28 @@ SequencesPanel.prototype._token = function({ label, node }) {
 };
 
 /** The bar that says whether what a performer has done is kept in its list, as the Tokens tab draws one. */
-SequencesPanel.prototype._keepArchived = function() {
+/**
+ * Whether this performer keeps what has left it, standing at the head of its list and taking no part in the
+ * order.
+ *
+ * It is a performer's own because a record is: what one performer did is no business of another, and a
+ * reader recapping one order has no reason to forget the rest. It stands in the list rather than over the
+ * tab for the same reason, and it is drawn as a bar rather than as a row so that it does not read as a token
+ * the performer is to work on. What is asked for last is what a performer opened later is born with.
+ */
+SequencesPanel.prototype._keepArchived = function(performer) {
   const bar = document.createElement('label'),
         toggle = document.createElement('span'),
         box = document.createElement('input'),
         slider = document.createElement('span'),
         label = document.createElement('span');
 
-  bar.className = 'bjs-token-header';
+  bar.className = 'bjs-token-header wb-performer-keep';
   toggle.className = 'bjs-token-toggle';
   slider.className = 'bjs-token-toggle-slider';
   box.type = 'checkbox';
-  box.checked = this._sequences.isKeepingArchived();
-  box.addEventListener('change', () => this._sequences.keepArchived(box.checked));
+  box.checked = this._sequences.isKeepingArchived(performer.key);
+  box.addEventListener('change', () => this._sequences.keepArchived(performer.key, box.checked));
   label.textContent = 'Keep archived tokens';
 
   toggle.append(box, slider);
@@ -312,6 +316,10 @@ SequencesPanel.prototype._list = function(performer) {
     side: 'left',
     onReorder: (keys) => this._sequences.setOrder(performer.key, keys)
   });
+
+  // What the performer keeps, at the head of its list and fixed there: it governs the list rather than
+  // standing in it, so nothing may be moved above it and it moves nowhere itself.
+  list.add(KEEP, this._keepArchived(performer), undefined, { fixed: true });
 
   performer.order.forEach((key) => {
     if (key === DIVIDER) {

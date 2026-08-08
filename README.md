@@ -20,7 +20,7 @@ This is the default mode. You edit the process and its BPMN-OS attributes in the
 
 ## Greedy simulation
 
-The process is executed by the BPMN-OS engine and its tokens are animated on the canvas. The engine runs inside the browser, so no server is required. The input is given in the Input tab, which shows the instance and every lookup table the model references as editable grids. A grid always shows the columns the model requires, so rows can be typed in directly, loaded from a CSV file, or exported to one. Pressing play starts the run. The run is seeded, so the same input always yields the same execution.
+The process is executed by the BPMN-OS engine and its tokens are animated on the canvas. The engine runs inside the browser, so no server is required. The input is given in columns of its own, to the right of everything a run produces: one for the instance table and one for every lookup table the model references, each an editable grid naming, beneath its own name, the file it was read from. A lookup names the file the model declares for it, the instance table names a file once one has been loaded, and until then it says that none is selected. The columns appear when a simulation is started and go with it, and the lookups follow the model, those of a model just read replacing those of the one before it. A grid always shows the columns the model requires, so rows can be typed in directly, loaded from a CSV file, or exported to one. Pressing play starts the run. The run is seeded, so the same input always yields the same execution.
 
 ## Playback
 

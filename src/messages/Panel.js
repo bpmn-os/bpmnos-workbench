@@ -154,12 +154,13 @@ MessagesPanel.prototype._init = function() {
     return; // no side panel, or the tab is up already
   }
 
-  const { body } = sidePanel.addTab({
+  const { header, body } = sidePanel.addTab({
     id: 'messages',
     label: this._config.label || 'Messages',
     priority: this._config.priority != null ? this._config.priority : -1
   });
 
+  this._band = header;
   this._body = body;
   this._build();
   this._render();
@@ -185,10 +186,10 @@ MessagesPanel.prototype._build = function() {
 
   heading.className = 'bjs-token-list-title bjs-token-filter';
 
-  const title = document.createElement('span');
+  const name = document.createElement('h1');
 
-  title.textContent = 'Messages';
-  heading.appendChild(title);
+  name.className = 'bjs-tab-name';
+  name.textContent = this._config.label || 'Messages';   // the band names the tab
 
   // The filter selects by the same relation the rows offer: a message is shown when one of the tokens that
   // may receive it is a token the reader has selected.
@@ -203,7 +204,7 @@ MessagesPanel.prototype._build = function() {
   this._inspector = document.createElement('div');
   this._inspector.className = 'bjs-token-inspector';
 
-  root.appendChild(heading);
+  this._band.append(name, heading);
   root.appendChild(this._inspector);
 
   this._body.appendChild(root);

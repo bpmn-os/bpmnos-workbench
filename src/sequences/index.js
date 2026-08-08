@@ -71,8 +71,8 @@ export class Sequences extends SequenceStore {
     return this._announce(super.forget(key, tokenKey));
   }
 
-  keepArchived(keep) {
-    return this._announce(super.keepArchived(keep));
+  keepArchived(key, keep) {
+    return this._announce(super.keepArchived(key, keep));
   }
 
   clear() {

@@ -6,6 +6,7 @@ import 'bpmn-js-bpmnlint/dist/assets/css/bpmn-js-bpmnlint.css';
 import 'bpmn-js-side-panel/assets/side-panel.css';
 import 'bpmn-js-animation/assets/animation.css';
 import 'bpmn-js-animation/assets/token-panel.css';
+import 'bpmn-js-toolbar/assets/toolbar.css';
 import 'bpmnos-js/bpmnos.css';        // the decision-task and execution-data-box icons
 import './execution-state/execution-state.css'; // the token entry's status/data/globals body
 import './messages/messages.css';               // the offer to deliver a message to a waiting token
@@ -21,12 +22,12 @@ import SidePanelModule from 'bpmn-js-side-panel';
 import LintModule from 'bpmn-js-bpmnlint';
 import getRules from 'bpmnos-js/rules';           // the authoritative BPMN-OS rule set (essentials + engine/* + bpmnos/*)
 import IssuesPanelModule from 'bpmn-workbench/issues'; // self-registering "Issues" side-panel tab
-import createToolbar from 'bpmn-workbench/toolbar';   // on-canvas file/view toolbar (open/save/export/zoom)
+import createToolbar from 'bpmn-js-toolbar';         // on-canvas file/view toolbar (load/save/export/zoom)
 
 // bpmn-js-animation: the "Tokens" side-panel tab (run/pause, speed, Load log) and the model⇄playback mode
 // controller. Playback itself is our native EngineLogPlayer, registered as the `playback` service the
 // TokenPanel drives (see EnginePlaybackModule).
-import { TokenPanelModule, ModeModule } from 'bpmn-js-animation';
+import { TokenPanelModule, ModeModule, AUTO_FOCUS_ICON } from 'bpmn-js-animation';
 
 // BPMNOS bpmn-js modules: the moddle extension + the decision-task decorator and properties panel.
 import BPMNOSModdleDescriptor from 'bpmnos-js/moddle';
@@ -172,8 +173,40 @@ modeler.on('import.done', () => {
 
 modeler.importXML(newDiagram).catch(err => console.error('failed to import diagram', err));
 
-// On-canvas file/view toolbar (open, save, export SVG, centre, zoom) — packaged by bpmn-workbench.
-createToolbar(modeler);
+// On-canvas file/view toolbar (load, save, export SVG, centre, zoom).
+//
+// Loading, saving and exporting are about the model, so they have no place while a run is on: the canvas is
+// read-only there and a control that can say nothing should not be offered. Looking at a diagram is valid
+// whatever is happening on it, so centre and zoom stay in every mode.
+//
+// Auto-focus takes their place while a run is on. It is about the canvas rather than about any panel: while
+// it is on, every token the run touches brings its instance to the front and drills to its plane, so the
+// step being played is the one in view. The setting belongs to the animator, so the button reads it, writes
+// it, and follows it changing; the toolbar is told an icon, a type, an action, and which configuration to
+// show, and knows none of the rest.
+const toolbar = createToolbar(modeler, {
+  buttons: {
+    'auto-focus': {
+      icon: AUTO_FOCUS_ICON,
+      type: 'toggle',
+      title: 'Auto-focus',
+      pressed: modeler.get('animator').getAutoFocus(),
+      action: (on) => modeler.get('animator').autoFocus(on)
+    }
+  },
+  configurations: {
+    model: [ 'load', 'save', 'export', 'center', 'zoom-in', 'zoom-out' ],
+    run: [ 'auto-focus', 'center', 'zoom-in', 'zoom-out' ]
+  },
+  configuration: 'model'
+});
+
+// The three sources a run has here — manual, greedy and playback — all put the workbench in `playback`, so
+// the toolbar knows two states where the workbench knows four.
+modeler.on('mode.changed', ({ mode }) => toolbar.setConfiguration(mode === 'model' ? 'model' : 'run'));
+
+// Whoever else writes the setting, the button says what it is.
+modeler.on('autoFocus.changed', ({ autoFocus }) => toolbar.setPressed('auto-focus', autoFocus));
 
 // Every column closed to begin with, each one opened by a double click on the resizer that carries its name.
 // The workbench says this and not the panel: a module that registers a tab knows what that tab wants, and

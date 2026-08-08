@@ -140,11 +140,15 @@ async function panel(messages) {
   const { default: MessagesPanel } = await import('../src/messages/Panel.js');
 
   const eventBus = createEventBus(),
+        header = document.createElement('div'),
         body = document.createElement('div');
 
   const injector = {
     get: (name) => name === 'sidePanel'
-      ? { addTab: () => ({ body, footer: document.createElement('div') }), setNote() {} }
+      ? {
+        addTab: () => ({ header, body, footer: document.createElement('div') }),
+        setNote() {}
+      }
       : undefined
   };
 
@@ -152,15 +156,17 @@ async function panel(messages) {
 
   eventBus.fire('diagram.init');
 
-  return { body, eventBus, shown };
+  return { header, body, eventBus, shown };
 }
 
 test('a tab with nothing to show says so, in the words the Tokens tab uses', async () => {
-  const { body } = await panel(new MessageStore());
+  const { header, body } = await panel(new MessageStore());
 
   assert.equal(body.querySelector('.bjs-token-empty').textContent, 'No messages.');
-  assert.equal(body.querySelector('.bjs-token-filter span').textContent, 'Messages');
-  assert.equal(body.querySelectorAll('.bjs-token-filter input').length, 2, 'all, or the selected recipients');
+
+  // the band names the tab and carries the filter under the name, so both stay while the list scrolls
+  assert.equal(header.querySelector('.bjs-tab-name').textContent, 'Messages');
+  assert.equal(header.querySelectorAll('.bjs-token-filter input').length, 2, 'all, or the selected recipients');
 });
 
 test('a row is the message name and its sender, marked with an envelope in the sender\'s colour', async () => {

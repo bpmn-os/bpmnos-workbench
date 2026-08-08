@@ -44,44 +44,59 @@ export default class SequenceStore {
     this._nodes = new Map();      // activity node -> the node performing it
     this._performing = new Set(); // the nodes that perform
     this._performers = new Map(); // key -> what one performer holds
-    this._archiving = true;       // whether a token that leaves is kept as a record of what was done
+
+    // Whether a token that leaves is kept as a record of what was done. It is a performer's own, one
+    // performer's record being no business of another's, and this is what a performer opened later is born
+    // with: the last thing the reader asked for, since a run opens performers as it goes and a reader who
+    // turned the record off would otherwise find it back on at the next performer.
+    this._archiving = true;
 
     this.setModel(performers);
   }
 
   /**
-   * Whether a token that leaves is kept. What is governed is the keeping: turning it off forgets what is
-   * held and forgets what leaves thereafter, and turning it on begins the record afresh rather than
-   * restoring what was not kept.
+   * Whether a token that leaves this performer is kept. What is governed is the keeping: turning it off
+   * forgets what that performer holds and what leaves it thereafter, and turning it on begins its record
+   * afresh rather than restoring what was not kept. Another performer's record is untouched, each keeping
+   * its own.
    *
+   * What is asked for last is also what a performer opened later is born with, a run opening performers as
+   * it goes.
+   *
+   * @param {string} key  the performer
+   * @param {boolean} keep
    * @returns {boolean} whether anything the reader sees has changed
    */
-  keepArchived(keep) {
-    if (this._archiving === !!keep) {
-      return false;
-    }
+  keepArchived(key, keep) {
+    const held = this._performers.get(key);
 
     this._archiving = !!keep;
 
-    if (this._archiving) {
+    if (!held || held.archiving === !!keep) {
+      return false;
+    }
+
+    held.archiving = !!keep;
+
+    if (held.archiving) {
       return true;
     }
 
     let changed = false;
 
-    this._performers.forEach((held) => {
-      held.order.filter((key) => held.archived.has(key)).forEach((key) => {
-        this._forget(held, key);
-        changed = true;
-      });
+    held.order.filter((archived) => held.archived.has(archived)).forEach((archived) => {
+      this._forget(held, archived);
+      changed = true;
     });
 
     return changed;
   }
 
-  /** Whether a token that leaves is kept. */
-  isKeepingArchived() {
-    return this._archiving;
+  /** Whether a token that leaves this performer is kept, or what a performer opened now would be born with. */
+  isKeepingArchived(key) {
+    const held = key === undefined ? null : this._performers.get(key);
+
+    return held ? held.archiving : this._archiving;
   }
 
   /** What the model resolves, which a fresh model replaces. */
@@ -133,6 +148,7 @@ export default class SequenceStore {
       node,
       conducting: null,
       committed: null,       // the token whose entry has been offered and cannot be taken back
+      archiving: this._archiving, // whether what leaves it is kept, born as the reader last asked
       archived: new Map(),   // token key -> what it held as it left
       order: [ DIVIDER ],
       tokens: new Map()
@@ -236,7 +252,7 @@ export default class SequenceStore {
       held.committed = null;
     }
 
-    if (this._archiving) {
+    if (held.archiving) {
       held.archived.set(tokenKey, values || null);
       // it left when it left, so it takes its place at the end of the record rather than wherever it stood:
       // a token withdrawn while waiting has no place among what was performed

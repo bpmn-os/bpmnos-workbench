@@ -137,9 +137,11 @@ Key source (this repo):
   An archived row is frozen: it carries the values the token held as it left, since the execution state
   forgets a token that is gone, and it offers the one control a row of this panel carries, forgetting it. A
   waiting row offers none, the engine queueing a token once and never again, so a row thrown away would be a
-  token that could never be performed. "Keep archived tokens", the bar the Tokens tab gives auto-focus,
-  governs the keeping rather than the showing: turning it off forgets what is held, and turning it on begins
-  the record afresh. The heading's filter lists a performer for its own token, a token of its list, and a
+  token that could never be performed. "Keep archived tokens" stands at the head of each performer's list,
+  fixed there and taking no part in the order, and governs the keeping rather than the showing: turning it
+  off forgets what that performer holds, and turning it on begins its record afresh. It is a performer's own,
+  a record of what one performer did being no business of another's, and what the reader asks for last is
+  what a performer opened later is born with, a run opening performers as it goes. The heading's filter lists a performer for its own token, a token of its list, and a
   token standing at an ad hoc sub-process it performs for, and for nothing else in the same process.
 - `src/decisions/` — the decision tasks a run waits at and the choices each waits for: `Store.js` (plain,
   node-testable, holding per decision what the engine has answered and what the reader has entered),
@@ -220,9 +222,14 @@ Key source (this repo):
   engine produced, whether it is alive, the time and the objective, and nothing of the engine's present;
   `describe` answers what the model resolves, which no record says and which is the same for every run of
   that model.
-- `src/input/` — what a run is given: the "Input" entry holding the instance table and one table per lookup
-  the model references, each editable in place. It hands its element back rather than mounting it, so the
-  same provider serves any source and any place it is shown.
+- `src/input/` — what a run is given: `index.js` builds the instance table and one table per lookup the
+  model references, each editable in place, and hands them back one at a time rather than mounting them, so
+  the same provider serves any source and any place they are shown; `tabs.js` turns that set into columns of
+  the panel, one per table, right of everything a run produces. Each column names its table and, beneath the
+  name, the file it was read from: the source the model declares for a lookup, the name of a file the reader
+  has loaded, which the table entry reports through `onLoad`, or "No file selected". The set of lookups is a
+  property of the model, so the columns of the old model are taken away and the new ones added whenever a
+  model is read, and all of them go when the run that mounted them ends.
 - `src/greedy/` — the greedy source: the seed, the cached log, and the log source the transport pulls on
   play. It mounts the input provider and runs through `src/engine/`, and owns neither.
 - `src/execution-state/` — the values a run produces: `Store.js` (plain, registry-taking, node-testable),

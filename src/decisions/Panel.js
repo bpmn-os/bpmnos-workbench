@@ -49,13 +49,14 @@ DecisionsPanel.prototype._init = function() {
     return;
   }
 
-  const { body } = sidePanel.addTab({
+  const { header, body } = sidePanel.addTab({
     id: 'decisions',
     label: this._config.label || 'Decisions',
     // last of the tabs a run concerns: Tokens, then Messages, then Sequences, then this
     priority: this._config.priority != null ? this._config.priority : -3
   });
 
+  this._band = header;
   this._body = body;
   this._build();
   this._render();
@@ -77,10 +78,10 @@ DecisionsPanel.prototype._build = function() {
 
   heading.className = 'bjs-token-list-title bjs-token-filter';
 
-  const title = document.createElement('span');
+  const name = document.createElement('h1');
 
-  title.textContent = 'Decisions';
-  heading.appendChild(title);
+  name.className = 'bjs-tab-name';
+  name.textContent = this._config.label || 'Decisions';   // the band names the tab
 
   addFilter(heading, {
     name: 'wb-decision-filter',
@@ -119,7 +120,7 @@ DecisionsPanel.prototype._build = function() {
   this._inspector.addEventListener('keyup', () => press(false));
   window.addEventListener('pointerup', () => press(false));
 
-  root.appendChild(heading);
+  this._band.append(name, heading);
   root.appendChild(this._inspector);
 
   this._body.appendChild(root);
