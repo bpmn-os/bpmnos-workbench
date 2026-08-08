@@ -6,6 +6,14 @@ Available online at [bpmn-os.github.io/bpmnos-workbench](https://bpmn-os.github.
 
 The workbench is always in one of three modes, selected by the buttons above the palette.
 
+Everything the workbench shows beside the diagram is a column of the panel on the right, in the order
+Properties, Issues, Tokens, Messages, Sequences and Decisions. Each column carries a resizer at its left
+edge naming it, read upward, which sets the column's width when it is dragged and opens and closes the
+column when it is double-clicked. Every column is closed when the workbench starts, so a model is met with
+the whole window and with the names of everything that may be opened standing beside it, and several
+columns may be open at once, which is what lets a run be followed in one while the tokens are listed in
+another.
+
 ## Model
 
 This is the default mode. You edit the process and its BPMN-OS attributes in the properties panel. A model checker reports problems in the Issues tab as you edit. The toolbar opens, saves, and exports diagrams and fits the view to the canvas.

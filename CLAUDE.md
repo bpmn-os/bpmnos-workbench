@@ -35,6 +35,15 @@ read-only mode still permits, and `bpmnos-js`'s `annotationRole` says which elem
 about. The Properties tab shows a note there instead of its fields, through `bpmn-js-side-panel`'s
 `setNote`, and a mode switch leaves the reader on the tab they were on.
 
+The panel is in the side panel's column view, every tab a column with a resizer of its own carrying its
+name, and `src/app.js` closes all six when the workbench starts. The application says that and not the
+panel: a module registering a tab knows what that tab wants, and only the application knows the whole
+arrangement, which is why the six identifiers are named in one place there rather than each module being
+told what to ask for. The order is the tabs' priorities, Properties and Issues from upstream and then the
+four a run concerns, Tokens, Messages, Sequences and Decisions, the last being the one a reader answers and
+therefore the one furthest from the diagram. Which columns a mode hides is not yet decided and nothing
+hides one today.
+
 `EngineLogPlayer` gathers the departures of one token at one node and draws them as one fork, since the
 engine copies a token per outgoing flow at every diverging gateway but the exclusive one. Instance
 identifiers are the engine's own: a multi-instance copy reports its own until it dies, which the engine was

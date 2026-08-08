@@ -127,6 +127,10 @@ const modeler = new BpmnModeler({
   sidePanel: {
     parent: '#side-panel',
     width: '320px',
+    // Every tab a column. A column closes to its resizer, so a reader who wants one tab at a time has it
+    // by closing the others and keeps their names in reach, which is what the tabbed view offered and no
+    // more; and the panel is then arranged the same way whatever mode the workbench is in.
+    viewMode: 'columns',
     header: '<div class="wb-brand">'
       + '<span class="wb-brand-name">BPMNOS Workbench</span>'
       + '<a class="wb-brand-gh" href="https://github.com/bpmn-os/bpmnos-workbench" target="_blank"'
@@ -170,6 +174,13 @@ modeler.importXML(newDiagram).catch(err => console.error('failed to import diagr
 
 // On-canvas file/view toolbar (open, save, export SVG, centre, zoom) — packaged by bpmn-workbench.
 createToolbar(modeler);
+
+// Every column closed to begin with, each one opened by a double click on the resizer that carries its name.
+// The workbench says this and not the panel: a module that registers a tab knows what that tab wants, and
+// only the application knows the whole arrangement. A reader accordingly meets the diagram with the whole
+// canvas and with the names of everything they may open standing beside it, and arranges from there.
+[ 'properties', 'issues', 'tokens', 'messages', 'sequences', 'decisions' ]
+  .forEach((id) => modeler.get('sidePanel').setTabOpen(id, false));
 
 // The Properties tab holds no meaning while a run is on: the canvas is read-only, so its fields would edit
 // a model that is not being edited. The tab keeps its title and its place and says what may be done

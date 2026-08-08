@@ -52,7 +52,8 @@ DecisionsPanel.prototype._init = function() {
   const { body } = sidePanel.addTab({
     id: 'decisions',
     label: this._config.label || 'Decisions',
-    priority: this._config.priority != null ? this._config.priority : -1
+    // last of the tabs a run concerns: Tokens, then Messages, then Sequences, then this
+    priority: this._config.priority != null ? this._config.priority : -3
   });
 
   this._body = body;
