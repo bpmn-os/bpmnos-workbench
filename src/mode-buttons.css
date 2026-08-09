@@ -64,6 +64,18 @@
   border-radius: 0 2px 2px 0;
 }
 
+/* Manual and greedy drive a run and playback replays a record of one, which is a different kind of thing, so
+   the two are told apart by a gap rather than by reading the icons: the first two are one segmented control
+   and the third stands beside it, rounded on both sides and carrying no collapsed border. */
+.wb-mode-buttons button[data-source="greedy"] {
+  border-radius: 0 2px 2px 0;
+}
+
+.wb-mode-buttons button[data-source="playback"] {
+  margin-left: 6px;
+  border-radius: 2px;
+}
+
 /* raise the hovered / active segment so its (accent) border paints over the neighbour's */
 .wb-mode-buttons button:hover {
   color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
