@@ -11,6 +11,14 @@ html {
   margin: 0;
 }
 
+/* The panel's footer holds the controls a run is driven by. That band is the same band the Tokens tab puts
+ * them in, which is the 32px entry with 10 above and below, so this host says so: the side panel's 40px is a
+ * default for a slot a host fills with what it likes. The header keeps that default, the brand line sitting
+ * in it. */
+.bjs-panel-footer {
+  --bjs-panel-slot-height: 52px;
+}
+
 /* app identity injected into the side-panel header slot: wordmark left, GitHub link right */
 .wb-brand {
   flex: 1 1 auto;

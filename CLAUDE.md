@@ -192,6 +192,14 @@ Key source (this repo):
   element away and the walk stops at a value nobody chose. What the store gained meanwhile is drawn when the
   press ends. A choice not yet reachable is drawn all the same, disabled, so the reader sees how many the
   task requires.
+- `src/run-controls.js` — the controls a run is driven by, in the panel's footer. They are
+  `bpmn-js-animation`'s own `createControlsEntry`, which the Tokens tab would otherwise draw at the foot of
+  its tab; the workbench says `tokenPanel: { controls: false }` and mounts that entry in
+  `sidePanel.getSlots().footer` instead, so a run has one set of controls rather than two over one state.
+  The element is taken out of the footer in Model mode and put back on the way in, an empty footer being one
+  the panel does not draw. `src/app.less` states the slot's height, the side panel's 40px being a default for
+  a slot a host fills with what it likes and this one holding the same band the Tokens tab gives the entry.
+  The mode buttons say which log control may act, a run that produces its own log having nothing to read.
 - `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
   since radios of one name are one group and two tabs are alive at once.
 - `src/animation-tokens.js` — the seam between the identities this application speaks and the tokens the

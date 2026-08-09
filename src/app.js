@@ -47,6 +47,7 @@ import TokenRowsModule from './token-rows/index.js';     // token rows a decisio
 import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
 import createManual from './manual/index.js';           // manual simulation: the user advances the run
 import createModeButtons, { modeIcon } from './mode-buttons.js';
+import createRunControls from './run-controls.js';   // the transport and the log, in the panel's footer
 import createClock from './clock.js';               // on-canvas simulation clock (top-right)
 
 import newDiagram from 'bpmnos-js/newDiagram.bpmn?raw'; // the authoritative BPMN-OS starter (status + instance data)
@@ -105,6 +106,10 @@ const modeler = new BpmnModeler({
   tokenPanel: {
     // shown in the Tokens tab while in Model mode — points at the on-canvas mode buttons (same icons)
     modelNote: runNote,
+
+    // The controls a run is driven by stand in the panel's footer, under every column, since they govern
+    // the run and not the list of tokens. The tab therefore draws none, and there is one set of them.
+    controls: false,
 
     // expanding a token row shows what that token holds: its status, the data it reads, and the globals
     renderTokenDetail: createTokenDetailRenderer({ get: (name) => modeler.get(name) })
@@ -240,7 +245,13 @@ const clock = createClock(modeler);
 // (microchip, runs the wasm engine to the end) and playback (play).
 const greedy = createGreedy(modeler);
 const manual = createManual(modeler, clock);
-createModeButtons(modeler, greedy, manual);
+
+// The controls a run is driven by, in the panel's footer: run and pause with the speed beside them, and the
+// three that act on the run as a whole. The mode buttons say which of the log controls may act, a run that
+// produces its own log having nothing to read.
+const runControls = createRunControls(modeler);
+
+createModeButtons(modeler, greedy, manual, runControls);
 
 // The modeller is reachable from the browser console while developing, so that a panel can be driven with a
 // fixture through the very events a run uses. It is not exposed by a production build.

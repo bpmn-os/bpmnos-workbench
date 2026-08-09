@@ -49,14 +49,13 @@ export function modeIcon(glyph, source) {
     + '</svg>';
 }
 
-export default function createModeButtons(modeler, greedy, manual) {
+export default function createModeButtons(modeler, greedy, manual, runControls) {
   const mode = modeler.get('mode');
   const eventBus = modeler.get('eventBus');
   const canvas = modeler.get('canvas');
   const sidePanel = modeler.get('sidePanel', false);
   const animation = modeler.get('animation', false);
   const playback = modeler.get('playback', false);
-  const tokenPanel = modeler.get('tokenPanel', false);
   const container = canvas.getContainer();
 
   const el = domify(`
@@ -111,10 +110,11 @@ export default function createModeButtons(modeler, greedy, manual) {
       greedy && greedy.deactivate();
       mode.setMode('model');
     }
-    // greedy produces the engine log → offer "Save log"; playback replays a file → "Load log". Both run
-    // in the anim 'play' mode, so the panel can't tell them apart on its own — bpmnos owns this choice.
-    if (tokenPanel && tokenPanel.setLogButton) {
-      tokenPanel.setLogButton(source === 'playback' ? 'load' : 'save');
+    // Greedy and manual produce the engine's log, so there is nothing to read into them and the load
+    // control is greyed; playback replays a file, so it is the one that may act. Both are the animation's
+    // `play` mode, which cannot tell them apart, so the workbench says which.
+    if (runControls) {
+      runControls.setLogButton(source === 'playback' ? 'load' : 'save');
     }
     // The mode service knows `model` and `playback`, and all three sources are the latter to it, so what
     // tells them apart is announced here: whatever needs to know which source is running listens for this.
