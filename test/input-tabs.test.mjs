@@ -19,11 +19,11 @@ async function mount() {
   const added = new Map();
 
   const sidePanel = {
-    addTab({ id, label, priority }) {
+    addTab({ id, label, priority, open }) {
       const header = document.createElement('div'),
             body = document.createElement('div');
 
-      added.set(id, { id, label, priority, header, body });
+      added.set(id, { id, label, priority, open, header, body });
 
       return { header, body };
     },
@@ -61,6 +61,8 @@ test('a table stands in a column of its own, right of what a run produces', asyn
         costs = panel.added.get('input:lookup:costs.csv');
 
   assert.equal(instance.label, 'Instance');
+  assert.equal(instance.open, false, 'closed, as every column of this workbench is');
+  assert.equal(costs.open, false);
   assert.ok(instance.priority < -3, 'right of Decisions, the last column a run fills');
   assert.ok(costs.priority < instance.priority, 'and the lookups in the order the model asks for');
 });

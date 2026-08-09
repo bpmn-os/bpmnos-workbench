@@ -41,7 +41,10 @@ export default function mountInputTabs(modeler, input) {
         label: table.name,
         // Right of the columns a run fills, the last of which stands at -3. They keep the order the model
         // asks for: the instance table, then the lookups as the engine reports them.
-        priority: -10 - index
+        priority: -10 - index,
+        // Closed, as every column of this workbench is: a run beginning is no reason to open a column the
+        // reader did not ask for, and its name stands on its resizer for whoever wants it.
+        open: false
       });
 
       const name = document.createElement('h1'),
