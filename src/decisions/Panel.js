@@ -56,6 +56,8 @@ DecisionsPanel.prototype._init = function() {
     priority: this._config.priority != null ? this._config.priority : -3
   });
 
+  this._sidePanel = sidePanel;
+  this._tabName = this._config.label || 'Decisions';
   this._band = header;
   this._body = body;
   this._build();
@@ -195,7 +197,24 @@ DecisionsPanel.prototype._restore = function(writing) {
   }
 };
 
+/**
+ * Say in the tab's own name how much it holds, as the Tokens and Issues tabs do: the name is what both views
+ * show, a selector in one and a column's resizer in the other, so a run can be followed while another column
+ * is open. The count is dropped when there is nothing, a name reading "(0)" being noise rather than news.
+ */
+DecisionsPanel.prototype._updateTabName = function() {
+  if (!this._sidePanel) {
+    return;
+  }
+
+  const held = this._decisions.all().length;
+
+  this._sidePanel.setTabLabel('decisions', held ? this._tabName + ' (' + held + ')' : this._tabName);
+};
+
 DecisionsPanel.prototype._render = function() {
+  this._updateTabName();
+
   if (!this._inspector) {
     return;
   }

@@ -266,6 +266,11 @@
 
         return { header, body };
       },
+
+      // The panel names a tab and its resizer; this page shows neither, so it takes the name and does
+      // nothing with it — a stub, not a fake: the panels call it whenever what they hold changes.
+      setTabLabel() {},
+
       setNote() {}
     };
 

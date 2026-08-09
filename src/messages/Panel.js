@@ -160,6 +160,8 @@ MessagesPanel.prototype._init = function() {
     priority: this._config.priority != null ? this._config.priority : -1
   });
 
+  this._sidePanel = sidePanel;
+  this._tabName = this._config.label || 'Messages';
   this._band = header;
   this._body = body;
   this._build();
@@ -218,7 +220,24 @@ MessagesPanel.prototype._build = function() {
  * is nothing within a row to keep current and nothing is gained by writing into one in place, as a token
  * entry does for values that change under it; what changes is which messages there are.
  */
+/**
+ * Say in the tab's own name how much it holds, as the Tokens and Issues tabs do: the name is what both views
+ * show, a selector in one and a column's resizer in the other, so a run can be followed while another column
+ * is open. The count is dropped when there is nothing, a name reading "(0)" being noise rather than news.
+ */
+MessagesPanel.prototype._updateTabName = function() {
+  if (!this._sidePanel) {
+    return;
+  }
+
+  const held = this._messages.all().length;
+
+  this._sidePanel.setTabLabel('messages', held ? this._tabName + ' (' + held + ')' : this._tabName);
+};
+
 MessagesPanel.prototype._render = function() {
+  this._updateTabName();
+
   if (!this._inspector) {
     return;
   }

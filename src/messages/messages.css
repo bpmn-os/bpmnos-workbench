@@ -3,9 +3,13 @@
    offer's shape is the side panel's — the round hit area every row control has — so these rules say only
    what is the offer's own. */
 
+/* The paper plane is drawn on the diagonal, its mass toward the tip at the upper right, so a glyph centred
+   on its box reads as sitting a little right of centre. It is moved back by a pixel, which is an optical
+   correction and belongs to the glyph rather than to the round hit area the side panel gives every control. */
 .wb-deliver svg {
   width: 12px;
   height: 12px;
+  transform: translateX(-1px);
 }
 
 .wb-deliver:hover:not(:disabled) {

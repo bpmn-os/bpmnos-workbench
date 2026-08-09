@@ -127,10 +127,13 @@
   background: var(--bjs-grey-97, hsl(225, 10%, 97%));
 }
 
-/* the offer to submit, whose shape is the side panel's own round hit area; only what is its own is here */
+/* The offer to submit, whose shape is the side panel's own round hit area; only what is its own is here. The
+   paper plane is moved back by a pixel, as the Messages tab moves it: drawn on the diagonal with its mass
+   toward the tip, a glyph centred on its box reads as sitting right of centre. */
 .wb-submit svg {
   width: 12px;
   height: 12px;
+  transform: translateX(-1px);
 }
 
 .wb-submit:hover:not(:disabled) {

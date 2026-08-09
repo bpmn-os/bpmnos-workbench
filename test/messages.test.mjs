@@ -141,12 +141,14 @@ async function panel(messages) {
 
   const eventBus = createEventBus(),
         header = document.createElement('div'),
-        body = document.createElement('div');
+        body = document.createElement('div'),
+        labels = [];   // what the tab has been named, the last of them being how much it holds
 
   const injector = {
     get: (name) => name === 'sidePanel'
       ? {
         addTab: () => ({ header, body, footer: document.createElement('div') }),
+        setTabLabel(id, label) { labels.push(label); },
         setNote() {}
       }
       : undefined
@@ -156,7 +158,7 @@ async function panel(messages) {
 
   eventBus.fire('diagram.init');
 
-  return { header, body, eventBus, shown };
+  return { header, body, labels, eventBus, shown };
 }
 
 test('a tab with nothing to show says so, in the words the Tokens tab uses', async () => {
@@ -167,6 +169,22 @@ test('a tab with nothing to show says so, in the words the Tokens tab uses', asy
   // the band names the tab and carries the filter under the name, so both stay while the list scrolls
   assert.equal(header.querySelector('.bjs-tab-name').textContent, 'Messages');
   assert.equal(header.querySelectorAll('.bjs-token-filter input').length, 2, 'all, or the selected recipients');
+});
+
+test('the tab says in its own name how many messages wait, and says nothing when none do', async () => {
+  const store = new MessageStore();
+
+  const { labels, eventBus } = await panel(store);
+
+  assert.equal(labels[labels.length - 1], 'Messages', 'nothing waiting, so nothing in the name');
+
+  store.apply(created('Sender', 'Instance_1', 'Request'), '#1a73e8');
+  eventBus.fire('messages.changed', {});
+  assert.equal(labels[labels.length - 1], 'Messages (1)');
+
+  store.apply(created('Sender', 'Instance_2', 'Request'), '#e8710a');
+  eventBus.fire('messages.changed', {});
+  assert.equal(labels[labels.length - 1], 'Messages (2)');
 });
 
 test('a row is the message name and its sender, marked with an envelope in the sender\'s colour', async () => {

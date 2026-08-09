@@ -200,6 +200,10 @@ Key source (this repo):
   the panel does not draw. `src/app.less` states the slot's height, the side panel's 40px being a default for
   a slot a host fills with what it likes and this one holding the same band the Tokens tab gives the entry.
   The mode buttons say which log control may act, a run that produces its own log having nothing to read.
+  Each of the three tabs says in its own name how much it holds — `Messages (2)`, `Sequences (3)`,
+  `Decisions (2)` — as the Tokens and Issues tabs do, the name being what a selector shows in one view and a
+  column's resizer in the other. The count is dropped when there is nothing, and it is the tab's name alone:
+  the heading in the band keeps the plain word.
 - `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
   since radios of one name are one group and two tabs are alive at once.
 - `src/animation-tokens.js` — the seam between the identities this application speaks and the tokens the
