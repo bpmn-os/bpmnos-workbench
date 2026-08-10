@@ -23,14 +23,28 @@ export default function mountInputTabs(modeler, input) {
     return { remove() {} };
   }
 
-  let shown = [];   // the tab ids in the panel, so that a rebuild takes away exactly what it put there
+  // the tabs in the panel, by the table each shows, so that a rebuild takes away exactly what it put there
+  // and so that what has not changed can be left where it is
+  let shown = new Map();
 
   function clear() {
-    shown.forEach((id) => sidePanel.removeTab(id));
-    shown = [];
+    shown.forEach(({ id }) => sidePanel.removeTab(id));
+    shown = new Map();
   }
 
   function build(tables) {
+    // Which tables there are is a property of the model, and a rebuild is for a model that has changed.
+    // Reading a file into one of them changes what it was read from and nothing else, so the columns stay
+    // as they are — a rebuild would take them away and put them back closed, losing the column the reader
+    // had opened along with its width and where it was scrolled to.
+    const sameTables = tables.length === shown.size && tables.every((table) => shown.has(table.key));
+
+    if (sameTables) {
+      tables.forEach((table) => setSource(shown.get(table.key).source, table.source));
+
+      return;
+    }
+
     clear();
 
     tables.forEach((table, index) => {
@@ -59,7 +73,7 @@ export default function mountInputTabs(modeler, input) {
       header.append(name, source);
       body.appendChild(table.element);
 
-      shown.push(id);
+      shown.set(table.key, { id, source });
     });
   }
 
