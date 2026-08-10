@@ -1,5 +1,7 @@
 import { DELETE_ICON } from 'bpmn-js-side-panel';
+import answerable from '../answerable.js';
 import createArchiveToggle from '../archive-toggle.js';
+import renderFrozenValues from '../frozen-values.js';
 import addFilter from '../panel-filter.js';
 import createMessageEntry from './MessageEntry.js';
 
@@ -32,6 +34,9 @@ export default function MessagesPanel(injector, eventBus, messages, config) {
   this._awaited = new Set(); // deliveries asked for and not yet reported, so the offer reads as waiting
   this._filter = 'all';      // which messages are listed: all of them, or those for the selected tokens
   this._showArchived = true; // whether what the run has finished with is listed with what it is still doing
+
+  // A delivery is the reader's only where the run asks them for one, which is a manual run and nothing else.
+  this._answerable = answerable(eventBus, () => this._render());
 
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('messages.changed', () => this._render());
@@ -75,14 +80,19 @@ MessagesPanel.prototype._candidates = function(message) {
 
     // it needs no fading of its own, standing within a row that is already faded whole
     return [ tokenRows.create(asked(message.key, message.recipientToken) + '|archived',
-      message.recipientToken, { frozen: true }).element ];
+      message.recipientToken, {
+        frozen: true,
+        detail: (token, contentEl) => renderFrozenValues(message.recipientToken.values, contentEl)
+      }).element ];
   }
 
   const recipients = this._shown(this._messages.recipients ? this._messages.recipients(message.key) : []);
 
+  // A run that delivers for itself is offered nothing: the row says which tokens may receive the message
+  // and asks nothing of the reader.
   return recipients.map((recipient) =>
     tokenRows.create(asked(message.key, recipient), recipient, {
-      control: this._offer(message, recipient)
+      control: this._answerable() ? this._offer(message, recipient) : null
     }).element);
 };
 
@@ -92,7 +102,7 @@ MessagesPanel.prototype._forget = function(message) {
 
   button.type = 'button';
   button.className = 'bjs-collapsible-entry-control wb-forget';
-  button.title = 'Forget this message';
+  button.title = 'Remove from archive';
   button.innerHTML = DELETE_ICON;
   button.addEventListener('click', (event) => {
     event.stopPropagation();

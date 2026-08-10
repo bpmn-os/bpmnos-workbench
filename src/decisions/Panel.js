@@ -1,6 +1,8 @@
 import { DELETE_ICON } from 'bpmn-js-side-panel';
 
+import answerable from '../answerable.js';
 import createArchiveToggle from '../archive-toggle.js';
+import renderFrozenValues from '../frozen-values.js';
 import addFilter from '../panel-filter.js';
 import { selectionFor } from '../token-rows/select.js';
 import createDecisionEntry, { createChoiceRow } from './DecisionEntry.js';
@@ -34,6 +36,9 @@ export default function DecisionsPanel(injector, eventBus, decisions, config) {
   this._showArchived = true; // whether what the run has answered is listed with what it is still asking
   this._pressed = false;  // a control is under a press, so the list is left alone until it ends
   this._deferred = false; // the store changed while it was, and is to be drawn once it does
+
+  // A choice is the reader's only where the run asks them for one, which is a manual run and nothing else.
+  this._answerable = answerable(eventBus, () => this._render());
 
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('decisions.changed', () => this._render());
@@ -150,13 +155,17 @@ DecisionsPanel.prototype._selected = function() {
   return new Set(primitives ? primitives.getSelectedTokens().map((token) => `${token.label}|${token.node}`) : []);
 };
 
-/** The colour of the token standing at the decision, where the animation has drawn one. */
+/**
+ * The colour of the token standing at the decision, where the animation has drawn one, and otherwise the
+ * colour the store kept as the decision was archived. A record outlives its token, so a run that has moved
+ * on holds no token to ask, and the row would be redrawn colourless the next time anything redrew the list.
+ */
 DecisionsPanel.prototype._colorOf = function(decision) {
   const primitives = this._injector.get('primitives', false),
         drawn = primitives && primitives.getTokens()
           .find((token) => token.label === decision.instanceId && token.node === decision.nodeId);
 
-  return drawn && drawn.color;
+  return (drawn && drawn.color) || decision.color || null;
 };
 
 /**
@@ -284,7 +293,10 @@ DecisionsPanel.prototype._render = function() {
     }, {
       open: this._open.get(decision.key) === true,
       onToggle: (open) => this._open.set(decision.key, open),
-      control: decision.archived ? this._forget(decision) : this._offer(decision),
+      // A run that answers itself is offered nothing to submit: the row is read, not answered.
+      control: decision.archived
+        ? this._forget(decision)
+        : (this._answerable() ? this._offer(decision) : null),
       body: this._body_(decision),
       onClick: selection && selection.onClick,
       archived: !!decision.archived
@@ -306,9 +318,15 @@ DecisionsPanel.prototype._render = function() {
  */
 DecisionsPanel.prototype._body_ = function(decision) {
   const body = document.createElement('div'),
+        frozen = this._decisions.frozenValues(decision.key),
         host = (this._injector.get('config.tokenPanel', false) || {}).renderTokenDetail;
 
-  if (host) {
+  // A record whose token has left discloses the values it froze as it left, as every archive of this
+  // application does. The host's renderer reads the running state, which holds nothing of a token that is
+  // gone, so it is asked only while there is a token to ask about.
+  if (frozen) {
+    renderFrozenValues(frozen, body);
+  } else if (host) {
     host({ label: decision.instanceId, node: decision.nodeId }, body);
   }
 
@@ -320,7 +338,7 @@ DecisionsPanel.prototype._body_ = function(decision) {
   decision.choices.forEach((choice, index) => {
     choices.appendChild(createChoiceRow(choice, (value) => {
       this._decisions.setValue(decision.key, index, value);
-    }, !!decision.archived));
+    }, !!decision.archived || !this._answerable()));
   });
 
   body.appendChild(choices);
@@ -334,7 +352,7 @@ DecisionsPanel.prototype._forget = function(decision) {
 
   button.type = 'button';
   button.className = 'bjs-collapsible-entry-control wb-forget';
-  button.title = 'Forget this decision';
+  button.title = 'Remove from archive';
   button.innerHTML = DELETE_ICON;
   button.addEventListener('click', (event) => {
     event.stopPropagation();

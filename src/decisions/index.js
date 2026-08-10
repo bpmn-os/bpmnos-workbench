@@ -35,12 +35,20 @@ export class Decisions extends DecisionStore {
     return this._announce(super.open(instanceId, nodeId));
   }
 
-  close(instanceId, nodeId) {
-    return this._announce(super.close(instanceId, nodeId));
+  close(instanceId, nodeId, color) {
+    return this._announce(super.close(instanceId, nodeId, color));
+  }
+
+  freeze(instanceId, nodeId, values) {
+    return this._announce(super.freeze(instanceId, nodeId, values));
   }
 
   setOptions(key, index, options) {
     return this._announce(super.setOptions(key, index, options));
+  }
+
+  decided(instanceId, nodeId, values) {
+    return this._announce(super.decided(instanceId, nodeId, values));
   }
 
   /**

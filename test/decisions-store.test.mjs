@@ -61,6 +61,44 @@ describe('the decision store', () => {
     assert.equal(open_.all().length, 1);
   });
 
+  it('takes what the run chose from the record announcing the decision', () => {
+    const store = opened();
+
+    // as `ChoiceDecision::jsonify` reports it: the attributes in the order the task states them, each with
+    // the value taken. This is a greedy run, where nothing was ever asked about what a choice might take.
+    assert.equal(store.decided('Instance_1', 'DecisionTask_1', { x: 1.333332, y: 1, text: 'A' }), true);
+
+    assert.deepEqual(store.get(KEY).choices,
+      [ { attribute: 'x', value: 1.333332 }, { attribute: 'y', value: 1 }, { attribute: 'text', value: 'A' } ]);
+    assert.deepEqual(store.values(KEY), [ 1.333332, 1, 'A' ]);
+    assert.equal(store.get(KEY).complete, true, 'the run answered every choice it had');
+  });
+
+  it('writes what the run chose beside what a choice was known to admit', () => {
+    const store = opened();
+
+    store.setOptions(KEY, 0, { attribute: 'mode', enumeration: [ 'road', 'rail' ] });
+    store.setOptions(KEY, 1, { attribute: 'duration', lowerBound: 1, upperBound: 9, lowest: 1, highest: 9 });
+
+    // a manual run: the reader entered these, and the record restates them
+    store.setValue(KEY, 0, 'rail');
+    store.setValue(KEY, 1, 4);
+
+    assert.equal(store.decided('Instance_1', 'DecisionTask_1', { mode: 'rail', duration: 4 }), true,
+      'the decision is complete, which the values alone did not say');
+    assert.deepEqual(store.get(KEY).choices[0].enumeration, [ 'road', 'rail' ], 'and nothing is given up');
+    assert.equal(store.get(KEY).choices[1].highest, 9);
+
+    assert.equal(store.decided('Instance_1', 'DecisionTask_1', { mode: 'rail', duration: 4 }), false,
+      'the same record says nothing new');
+  });
+
+  it('takes what the run chose only for a decision it holds', () => {
+    const store = opened();
+
+    assert.equal(store.decided('Instance_1', 'Other', { x: 1 }), false);
+  });
+
   it('holds what it was answered, and the value entered against it', () => {
     const store = opened();
 

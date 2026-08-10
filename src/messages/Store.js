@@ -106,6 +106,38 @@ export default class MessageStore {
     return true;
   }
 
+  /**
+   * The values a recipient held as it left the node it received at, kept with the record of the delivery.
+   *
+   * A record outlives its token, and the execution state forgets a token that is gone, so a row disclosing
+   * the running state would disclose nothing a moment after a reader could have read it. They are taken as
+   * the token leaves and not as the delivery is reported, a token going on with what it received before it
+   * goes; until then the record holds none and the token is shown as it is. A token leaving a loop activity
+   * leaves it once per loop, and what it held the last time is what it carried away.
+   *
+   * Every message that token received freezes them, one token being able to take more than one.
+   *
+   * @param {Array} values  the sections as a token entry shows them
+   */
+  freeze(instanceId, nodeId, values) {
+    let frozen = false;
+
+    if (!values) {
+      return false;
+    }
+
+    this._messages.forEach((held) => {
+      const recipient = held.recipientToken;
+
+      if (recipient && recipient.instanceId === instanceId && recipient.nodeId === nodeId) {
+        recipient.values = values;
+        frozen = true;
+      }
+    });
+
+    return frozen;
+  }
+
   /** The message held under a key, or nothing. */
   get(key) {
     return this._messages.get(key);

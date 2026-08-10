@@ -1,6 +1,17 @@
 /**
- * EngineRunner — a thin, promise-based wrapper around the engine Web Worker (engine-worker.js). One request
- * is in flight at a time (the flow is sequential: load a model, then run, then step).
+ * EngineRunner — a thin, promise-based wrapper around the engine Web Worker (engine-worker.js).
+ *
+ * The worker answers one request at a time, so this holds a queue and serves them in the order they were
+ * made. That the channel is single is the worker's own affair and not something a caller can be expected to
+ * work around: the callers here are set off by different things — the player catching up, the reader
+ * choosing, the reader deciding — and none of them can know what another is in the middle of. Refusing
+ * whoever arrived second would make every caller responsible for the timing of every other, which is a
+ * responsibility none of them is in a position to hold.
+ *
+ * Waiting is not the same as being safe to ask, and this says nothing about the latter. The engine comes to
+ * rest after every advance, so it may be asked whenever no advance is under way; whether the answer is
+ * about the state the reader is looking at is a question for whoever is driving the run, and `src/live/`
+ * answers it there.
  *
  *   loadModel(xml)         → Promise<string[]>  the lookup-table names the model references
  *   setLookup(name,csv)                         supply one lookup table
@@ -26,9 +37,16 @@
  * model resolves rather than what a run does is asked once, through `describe`.
  */
 export default class EngineRunner {
-  constructor() {
-    this._worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
-    this._pending = null; // { resolve, reject, kind }
+  /**
+   * @param {Object} [worker]  the worker to speak to, which the application does not give: it is here so
+   *                           that what this does with a channel — the order it serves requests in, and what
+   *                           it does when the channel fails — can be read without a browser.
+   */
+  constructor(worker) {
+    this._worker = worker
+      || new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
+    this._pending = null; // { resolve, reject, kind }, the request the worker is answering
+    this._queue = [];     // { resolve, reject, kind, message }, those waiting their turn
     this._worker.onmessage = (e) => this._onMessage(e.data);
     this._worker.onerror = (e) => this._fail(new Error('engine worker error: ' + (e.message || e.type || e)));
   }
@@ -122,13 +140,28 @@ export default class EngineRunner {
 
   _request(kind, message) {
     return new Promise((resolve, reject) => {
-      if (this._pending) {
-        reject(new Error('engine busy'));
-        return;
-      }
-      this._pending = { resolve, reject, kind };
-      this._worker.postMessage(message);
+      this._queue.push({ resolve, reject, kind, message });
+      this._serve();
     });
+  }
+
+  /** Hand the worker the next request, where it is not still answering one. */
+  _serve() {
+    if (this._pending || !this._queue.length) {
+      return;
+    }
+
+    this._pending = this._queue.shift();
+    this._worker.postMessage(this._pending.message);
+  }
+
+  /** The worker has answered what it was asked; whoever is next may be asked now. */
+  _answer(resolution) {
+    const answered = this._pending;
+
+    this._pending = null;
+    resolution(answered);
+    this._serve();
   }
 
   _onMessage(msg) {
@@ -139,39 +172,52 @@ export default class EngineRunner {
       this._fail(new Error(msg.error));
       return;
     }
-    if (msg.type === 'described' && this._pending && this._pending.kind === 'described') {
-      const p = this._pending; this._pending = null; p.resolve(msg.described);
+    if (msg.type === 'described' && this._awaiting('described')) {
+      this._answer((p) => p.resolve(msg.described));
       return;
     }
 
-    if (msg.type === 'choiceCandidates' && this._pending && this._pending.kind === 'choiceCandidates') {
-      const p = this._pending; this._pending = null; p.resolve(msg.candidates);
+    if (msg.type === 'choiceCandidates' && this._awaiting('choiceCandidates')) {
+      this._answer((p) => p.resolve(msg.candidates));
       return;
     }
 
-    if (msg.type === 'lookups' && this._pending && this._pending.kind === 'loadModel') {
-      const p = this._pending; this._pending = null; p.resolve(msg.required);
+    if (msg.type === 'lookups' && this._awaiting('loadModel')) {
+      this._answer((p) => p.resolve(msg.required));
       return;
     }
-    if (msg.type === 'done' && this._pending && this._pending.kind === 'run') {
-      const p = this._pending; this._pending = null; p.resolve(msg);
+    if (msg.type === 'done' && this._awaiting('run')) {
+      this._answer((p) => p.resolve(msg));
       return;
     }
-    if (msg.type === 'step' && this._pending && this._pending.kind === 'step') {
-      const p = this._pending; this._pending = null; p.resolve(msg);
+    if (msg.type === 'step' && this._awaiting('step')) {
+      this._answer((p) => p.resolve(msg));
       return;
     }
-    if (msg.type === 'stopped' && this._pending && this._pending.kind === 'stopped') {
-      const p = this._pending; this._pending = null; p.resolve();
+    if (msg.type === 'stopped' && this._awaiting('stopped')) {
+      this._answer((p) => p.resolve());
       return;
     }
   }
 
+  _awaiting(kind) {
+    return !!this._pending && this._pending.kind === kind;
+  }
+
+  /**
+   * The worker has failed. That is the channel itself failing rather than one request going wrong, so
+   * everything waiting on it fails with the one being answered: nothing behind it will ever be served.
+   */
   _fail(err) {
-    if (this._pending) {
-      const p = this._pending; this._pending = null; p.reject(err);
-    } else {
-      console.error('[greedy]', err);
+    const failed = [ ...(this._pending ? [ this._pending ] : []), ...this._queue ];
+
+    this._pending = null;
+    this._queue = [];
+
+    if (!failed.length) {
+      console.error('[engine]', err);
     }
+
+    failed.forEach((request) => request.reject(err));
   }
 }

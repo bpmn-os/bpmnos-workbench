@@ -48,7 +48,7 @@ import TokenRowsModule from './token-rows/index.js';     // token rows a decisio
 import createLiveRun from './live/index.js';            // the run the wasm engine performs, greedy or manual
 import createModeButtons, { modeIcon } from './mode-buttons.js';
 import createRunControls from './run-controls.js';   // the transport and the log, in the panel's footer
-import createClock from './clock.js';               // on-canvas simulation clock (top-right)
+import createCanvasDisplay from './canvas-display/index.js'; // what a run has reached, on the canvas
 
 import newDiagram from 'bpmnos-js/newDiagram.bpmn?raw'; // the authoritative BPMN-OS starter (status + instance data)
 
@@ -237,13 +237,14 @@ modeler.on('mode.changed', ({ mode }) => {
   }
 });
 
-// On-canvas simulation clock (top-right): the current clock-tick time, and, while the user drives the run,
-// the control that advances it.
-const clock = createClock(modeler);
+// What a run has reached, shown at the top right of the canvas: the simulated time, which while the reader
+// drives the run is also the control that advances it, and beneath it the objective the engine has
+// accumulated.
+const display = createCanvasDisplay(modeler);
 
 // The run the engine performs, in either mode. Greedy and manual are one run differing in which of the
 // controller's dispatchers answer, so one module owns the session and the mode toggle turns it over.
-const liveRun = createLiveRun(modeler, clock);
+const liveRun = createLiveRun(modeler, display);
 
 // The controls a run is driven by, in the panel's footer: run and pause with the speed beside them, and the
 // three that act on the run as a whole. The mode buttons say which of the log controls may act, a run that

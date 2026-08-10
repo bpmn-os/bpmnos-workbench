@@ -27,7 +27,7 @@ label and `Timestamp` being the clock on the canvas. The Tokens tab is given the
 `config.tokenPanel.renderTokenDetail`, which `bpmn-js-animation` reads as it builds its lists, so the
 renderer is passed at construction and creates its view on the first row it draws. The repository has an
 `exports` map on the pattern `bpmn-workbench` uses, offering `./execution-state` and its three pieces,
-`./playback`, `./engine`, `./input` and `./greedy`; `bpmnos-js` must never consume them, the reverse edge being a cycle.
+`./playback`, `./engine` and `./input`; `bpmnos-js` must never consume them, the reverse edge being a cycle.
 
 The canvas carries `bpmnos-js/annotation`, whose execution data box stays usable while a run is on: the
 workbench declares that through `config.mode.exceptions`, which `bpmn-js-animation` reads to decide what a
@@ -57,14 +57,15 @@ properties panel, auto-hosted as the side panel's "Properties" tab), `bpmn-workb
 rules/issues/toolbar, and **native playback of BPMN-OS engine execution logs**. It boots on a **blank
 diagram** — nothing is hardwired: load a model with the toolbar and an engine `-log.json` with the Tokens
 tab's "Load log". `src/examples/earliest-arrival.{bpmn,-log.json}` (the EAP instance from
-`BPMNOSInstances.jl`) is a loadable sample, not auto-loaded, and the tests play that very log. Greedy
-simulation runs the wasm engine live (`src/greedy/`, through `src/engine/` and `src/input/`) and playback
-replays a recorded `-log.json`. Manual simulation (`src/manual/`) drives the same engine step by step: its
-controller is composed without a clock, so the engine runs as far as it can and then stands still, the
-canvas clock pulses once the diagram has caught up, and a click on it enqueues a clock tick that lets the
-engine carry on. What it produces is played as it arrives rather than after the run. The decisions a user
-will make — a message delivery, a choice, a sequential entry — reach the engine through the same call and
-need no protocol of their own.
+`BPMNOSInstances.jl`) is a loadable sample, not auto-loaded, and the tests play that very log. Playback
+replays a recorded `-log.json`; greedy and manual simulation are one live run of the wasm engine
+(`src/live/`, through `src/engine/` and `src/input/`), differing in which of the controller's dispatchers
+answer, so the mode turns over without the run beginning again. Greedy lets every dispatcher speak, so the
+run settles each decision and advances its own clock. Manual silences the deciders and the clock, so the
+engine goes as far as it can and then stands still, the clock of the canvas display pulses once the diagram
+has caught up, and a click on it enqueues a clock tick that lets the engine carry on. What a run produces is played as it
+arrives rather than after the run. The decisions a user makes — a message delivery, a choice, a sequential
+entry — reach the engine through the same call and need no protocol of their own.
 
 **Reuse upstream, don't reinvent.** The playback UI is bpmn-js-animation's own **TokenPanel** (the
 "Tokens" side-panel tab: run/pause, speed, Load log); the mode toggle uses bpmn-workbench's mode-button
@@ -152,8 +153,24 @@ Key source (this repo):
 - The archive of a run: what Messages, Sequences and Decisions each hold of what the run has finished with —
   a message delivered or withdrawn, a performer that has closed and the tokens that have left one, a decision
   that has been answered. Each such thing is kept by its store as a record, faded and offering the one
-  control a record carries, forgetting it, and each is a record precisely because the run does not hold it
-  any more: what it discloses was frozen as it went.
+  control a record carries, removing it from the archive, and each is a record precisely because the run does
+  not hold it any more: what it discloses was frozen as it went.
+
+  What a record discloses of its token is the values that token held as it finished at the node, frozen by
+  the player when it draws a record reporting `COMPLETED`, `FAILED` or `WITHDRAWN` there. Those three are
+  mutually exclusive and are the one point every route out passes through: a task exits and then departs or
+  is done, while an intermediate catching event departs straight from `COMPLETED` and never exits at all. A
+  loop activity completes once per loop, so what is kept is what it held the last time. The three archives
+  draw those values one way, through `src/frozen-values.js`, in the sections and lines a token entry uses and
+  written with that entry's own formatter, a value read in a record and the same value read while it was
+  current being one value.
+
+  A control a reader acts with lives in a manual run and nowhere else, which `src/answerable.js` answers for
+  all three tabs from the `source.changed` the mode buttons announce. A greedy run answers every delivery,
+  order and choice itself and playback is a record of a run answered long ago, so the offer to deliver, the
+  arrows of an order and the controls of a choice are absent there, the row being read rather than answered.
+  The source is what tells the three apart, `mode.getMode()` saying `playback` of a greedy run and of a
+  replayed log alike, and it is the same rule the canvas clock follows in deciding whether it may be clicked.
 
   "Show archive" stands in each tab's footer, drawn once in `src/archive-toggle.js`, and governs the showing
   and not the keeping. A reader asking to see what a run is still doing is not asking to destroy the record
@@ -174,14 +191,19 @@ Key source (this repo):
   token can evaluate it, and because a decision task states its choices in order with a later one depending
   on the earlier ones — `DecisionTask::determineAlternatives` writes each chosen value into the status
   before evaluating the next condition. So the bridge answers one choice at a time, against the values
-  already selected, and `src/manual/index.js` walks it whenever the player announces `playback.drained`,
-  which in a manual run is the moment the diagram has caught up and the engine stands still. A value the
-  answer no longer admits is cleared, and everything after it with it. What a later choice answered before
+  already selected, and `src/live/index.js` reads them whenever the run is waiting for the reader, which is
+  the engine standing still with the diagram caught up: only then is what a choice may take an answer about
+  the state the reader is looking at. A decision the run has answered is not asked about, the request no
+  longer standing. A value the answer no longer admits is cleared, and everything after it with it. What a later choice answered before
   stands until the new answer replaces it, and a position answered with what it already holds is no change
   and announces none: the question is asked again whenever anything moves and usually has the same answer,
   and a store that reported each of those would redraw a control the reader is working in for nothing. The player opens a decision on a
   `choiceRequest` record and closes it when its token reports any state past `BUSY`, on the same terms as a
-  message that stops being awaited.
+  message that stops being awaited. The closed decision keeps the colour its token was drawn in, a record
+  outliving its token, and a choice that is read rather than answered — one the run decided, one a record
+  holds — is written as a token entry writes an attribute, so that a chosen value and the status it became
+  read alike. The control a reader chooses in keeps the engine's own six places, every digit there being one
+  they may land on.
 
   A bounded choice is answered as two pairs. The bounds the condition states arrive as `lowerBound` and
   `upperBound`, with two corrections already made: a strict bound has been moved inward by the engine's own
@@ -209,6 +231,25 @@ Key source (this repo):
   element away and the walk stops at a value nobody chose. What the store gained meanwhile is drawn when the
   press ends. A choice not yet reachable is drawn all the same, disabled, so the reader sees how many the
   task requires.
+- `src/canvas-display/` — what a run has reached, at the top right of the canvas: `index.js` (the display,
+  which owns the chip both readings wear, the alignment to the mode buttons, being shown outside Model mode
+  and the seven-segment font), `clock.js`, `objective.js`, `format.js` (a reading as it is written, plain and
+  node-testable) and `canvas-display.css`.
+
+  There are two readings and each is a reading of the same run, so nothing about when a run begins, ends or
+  is refreshed belongs to either of them. The clock is the simulated time the player has drawn, and, where
+  the reader advances time, the control that advances it: it takes the pointer, wears the pulse while the
+  engine waits for a tick, and a click fires `clock.tick`. The objective is what the engine has accumulated,
+  written by the live run after every advance. That is honest because the run is paced by what has been
+  drawn, one event being taken per announcement, so the engine stands at most one event ahead of the canvas
+  and the two readings say the same moment.
+
+  The objective is not drawn in playback at all. A log is the engine's own records and carries no objective,
+  neither per record nor at the end, so a reading there would say the run had none rather than that a log
+  does not carry one. Which way it is read is the reader's and not the run's: `SystemState::getObjective`
+  accumulates assuming maximisation, which is the model's semantics, so `trending-up` shows the value as the
+  engine holds it and `trending-down` shows the same run written as a minimisation, the value multiplied by
+  minus one, and clicking the icon says nothing to the engine.
 - `src/run-controls.js` — the controls a run is driven by, in the panel's footer. They are
   `bpmn-js-animation`'s own `createControlsEntry`, which the Tokens tab would otherwise draw at the foot of
   its tab; the workbench says `tokenPanel: { controls: false }` and mounts that entry in
@@ -223,6 +264,10 @@ Key source (this repo):
   the heading in the band keeps the plain word.
 - `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
   since radios of one name are one group and two tabs are alive at once.
+- `src/answerable.js` — whether what a run shows is the reader's to answer, which is a manual run and nothing
+  else, read from `source.changed` and reported to a panel as it changes.
+- `src/frozen-values.js` — the values a token held as it finished, drawn as a token entry draws what a token
+  holds, which is how every archive of a run discloses them.
 - `src/animation-tokens.js` — the seam between the identities this application speaks and the tokens the
   animation holds. A node is always a process rather than the pool drawn for it, and the animation reports
   that pool, so the two are translated here and nowhere else: the process a node stands for, and the
@@ -238,7 +283,9 @@ Key source (this repo):
   more: the token that was performed and archived, the performer that closed and the token that took the
   message that was delivered are all absent from it, as they are absent from an animation once they have
   gone. A page that kept them alive would draw every record from a token that a run would not have, and
-  would show nothing of what such a record gets wrong.
+  would show nothing of what such a record gets wrong. Each record accordingly carries frozen values, as one
+  written by the player does, and the run it stands in for is a manual one, that being the only run whose
+  controls a reader acts with and therefore the only one in which these tabs show the whole of what they do.
 - `src/token-rows/` — the `tokenRows` service: a token drawn as the Tokens tab draws it, wherever a panel
   asks something of the reader about it. The row is `createTokenEntry` given what the token panel gives its
   own rows, so a token reads the same everywhere; a panel adds a control the row carries and, later, a
@@ -253,10 +300,41 @@ Key source (this repo):
   from `saveXML`.
 - `src/engine/` — the wasm engine and nothing about who drives it: `engine-worker.js` (the Web Worker that
   assembles an `Input` and runs the engine, `Engine.run` being a blocking call) and `EngineRunner.js` (the
-  promise-based wrapper the page holds, one request in flight at a time). A step reports the records the
-  engine produced, whether it is alive, the time and the objective, and nothing of the engine's present;
-  `describe` answers what the model resolves, which no record says and which is the same for every run of
-  that model.
+  promise-based wrapper the page holds). A step reports the records the engine produced, whether it is alive,
+  the time and the objective, and nothing of the engine's present; `describe` answers what the model
+  resolves, which no record says and which is the same for every run of that model.
+
+  The worker answers one request at a time, so the wrapper holds a queue and serves them in the order they
+  were made. That the channel is single is the worker's own affair: the callers are set off by things that
+  know nothing of each other, so none of them is in a position to wait for another, and refusing whoever
+  arrived second made every caller answerable for the timing of every other. A channel that fails fails
+  everything waiting on it, nothing behind it ever being served. The wrapper takes the worker it speaks to,
+  which the application does not give it and a test does, so what it does with a channel is readable without
+  a browser.
+- `src/live/` — the run the engine performs, in either mode. Greedy and manual are one session made of
+  steps, and a step brings a requested mode change into effect and then advances the engine by one fetched
+  event, so a reconfiguration falls between two events and never into the middle of one.
+
+  The run is either being advanced or being asked, never both. The engine comes to rest after every advance,
+  so it may be asked at almost any moment; what it may not be is asked about a state that moves under the
+  question, and an advance is exactly that. A decision task states its choices in order, so reading them is
+  several questions and every one is about the state the engine stands in. Whichever is called for while the
+  other is under way is remembered and taken up when it ends, both being set off by things that know nothing
+  of each other.
+
+  Two facts about a run are held apart and neither implies the other. The engine stalls when it is alive and
+  can fetch nothing, which in manual is it waiting for the reader and in greedy never happens. The player
+  drains when it has drawn everything it holds, which happens over and over in a greedy run. `drained` is
+  therefore the animation's back-pressure on the engine — one step is taken per announcement, so the run is
+  paced by what has been drawn rather than by how fast the engine can go — and it is also half of what says
+  the run waits for the reader. Only where both hold is what the engine stands in what the reader is looking
+  at, which is the condition for inviting them to act, for the clock to pulse, and for asking the engine
+  anything on their behalf. Reading the choices is asked of that condition and not of the drain alone.
+
+  What ends a run is the engine failing to carry it forward. A reconfiguration that fails leaves the run
+  standing in the mode it was in, and a failure to read the choices leaves it standing with a choice the
+  reader cannot yet make, which is what the tab draws in any case; neither is the run failing, and treating
+  every error as one turned a collision into a dead run with nothing to show for it.
 - `src/input/` — what a run is given: `index.js` builds the instance table and one table per lookup the
   model references, each editable in place, and hands them back one at a time rather than mounting them, so
   the same provider serves any source and any place they are shown; `tabs.js` turns that set into columns of
@@ -268,8 +346,18 @@ Key source (this repo):
   such a change: it alters what that table was read from and nothing else, so the columns stay as they are
   and only the line beneath each name is written again. Taking them away and putting them back would close
   the column the reader had opened and lose its width and where it was scrolled to.
-- `src/greedy/` — the greedy source: the seed, the cached log, and the log source the transport pulls on
-  play. It mounts the input provider and runs through `src/engine/`, and owns neither.
+
+  What a table holds outlives the provider, which lives only as long as a run. A reader going back to
+  modelling ends the run, and the instance rows they typed and the files they read into the lookups are
+  theirs to come back to, so the text of each table is kept by `src/live/index.js`, which outlives a run, and
+  handed to the provider under the key of the table it belongs to. A rebuilt table is filled from it, and
+  what the model has made stale is not restored: a lookup the model no longer declares is never asked for
+  again, and one whose declared header has changed restores nothing, `setCsv` refusing text that names other
+  columns. The instance table is always restored, its columns being fixed by the CSV format the engine reads.
+
+  A table may also be emptied whole, through the table entry's `clearable` control, a trash left of the one
+  that reads a file in. What a table was read from is then nothing, the rows a file put there being gone, so
+  the line beneath the name falls back to the source the model declares or to "No file selected".
 - `src/execution-state/` — the values a run produces: `Store.js` (plain, registry-taking, node-testable),
   `index.js` (the `executionState` service, riding the animation's token events), `sections.js` (the rows a
   token entry shows), `View.js` + `execution-state.css` (the body, kept current in place). Requires

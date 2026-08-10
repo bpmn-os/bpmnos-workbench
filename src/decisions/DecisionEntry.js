@@ -1,6 +1,7 @@
 import { createCollapsibleEntry } from 'bpmn-js-side-panel';
 import { createDecisionTaskSymbol } from 'bpmnos-js/decision-task-symbol';
 
+import { format } from '../execution-state/View.js';
 import { next, shownValue, snap, walkable } from './grid.js';
 
 /**
@@ -95,21 +96,26 @@ export default function createDecisionEntry(decision, options = {}) {
  * is of is all a reader needs, and the panel resolves nothing against it.
  *
  * A bound the engine cannot offer is said so under the control. The values a choice admits are the multiples
- * of its step, and a step the engine cannot hold exactly puts them slightly beside the values the model
- * states, so the least selectable value may lie above the lower bound and the greatest below the upper. It
- * is said only where a reader could see it, which is where the two differ once both are written to the
- * precision the control shows; a difference that rounds away is not one the reader can act on.
+ * of its step counted from zero, so where the bound is not itself a multiple the least selectable value lies
+ * above the lower bound and the greatest below the upper: a choice bounded by one and ten in thirds begins
+ * at 1.333332. It is said only where a reader could see it, which is where the two differ once both are
+ * written to the engine's precision.
  *
  * @param {Object} choice  `{ attribute: s, enumeration?, lowerBound?, upperBound?, lowest?, highest?,
  *                         multipleOf?, value? }`, or `{ attribute: s }` alone where it cannot yet be made
  * @param {Function} onChange  (value) => void
  */
 export function createChoiceRow(choice, onChange, readOnly) {
-  const row = el('div', 'wb-choice');
-
-  if (readOnly) {
-    row.classList.add('wb-choice-readonly');
+  // A choice that is not the reader's to make is read rather than offered: a decision the run has answered
+  // is a record of what was chosen, and a choice a greedy run decided was never asked of anybody. Both are
+  // one line of a name and a value, as a token's status attributes are read, since that is what they now
+  // are — what this token held. A control would go on saying a choice is being offered when none is, and
+  // would take a panel's width to say it.
+  if (readOnly || decided(choice)) {
+    return attributeRow(choice);
   }
+
+  const row = el('div', 'wb-choice');
 
   row.appendChild(text('div', 'wb-choice-name', choice.attribute || ''));
 
@@ -117,23 +123,36 @@ export function createChoiceRow(choice, onChange, readOnly) {
     const select = enumerationControl(choice);
 
     select.className = 'wb-choice-control';
-    select.disabled = select.disabled || !!readOnly; // a choice not yet reachable offers nothing either
     select.addEventListener('change', () => onChange(read(select, choice)));
 
     row.appendChild(select);
   } else {
-    const control = spinner(choice, onChange);
-
-    if (readOnly) {
-      // what was chosen, not a choice to make: the value reads and copies, and refuses only the edit
-      control.querySelectorAll('input').forEach((field) => { field.readOnly = true; });
-      control.querySelectorAll('button').forEach((button) => { button.disabled = true; });
-    }
-
-    row.appendChild(control);
+    row.appendChild(spinner(choice, onChange));
   }
 
   notes(choice).forEach((note) => row.appendChild(note));
+
+  return row;
+}
+
+/**
+ * What was chosen, on one line: the attribute and its value, in the lines a token entry shows its
+ * attributes in, so that a decision that has been made reads as the rest of what a token holds.
+ *
+ * A choice with no value is one the run never reached, which happens where the token carrying the decision
+ * did not survive it. It is said rather than left blank, as an unset attribute is.
+ */
+function attributeRow(choice) {
+  const row = el('div', 'wb-attribute wb-choice-made'),
+        unset = choice.value === undefined || choice.value === null;
+
+  // Written as a token entry writes an attribute, since that is what this line now is: what the token held.
+  // A value shown to the engine's precision belongs to a control a reader is choosing in, where every digit
+  // the engine holds is a digit they may land on; a value they can only read is read beside the status it
+  // became, and the two must say the same thing.
+  row.appendChild(text('span', 'wb-attribute-name', choice.attribute || ''));
+  row.appendChild(text('span', 'wb-attribute-value' + (unset ? ' wb-attribute-null' : ''),
+    unset ? 'undefined' : format(choice.value)));
 
   return row;
 }
@@ -146,6 +165,18 @@ export function createChoiceRow(choice, onChange, readOnly) {
  * it becomes reachable. Where the model said nothing of it — a host that never asked for a description — it
  * is read from the answer instead, which is right whenever there is an answer to read.
  */
+/**
+ * A choice that holds a value and nothing else: what the record announcing the decision left, where nothing
+ * was ever asked about what the choice might have taken.
+ *
+ * The kind is what tells this from a choice whose options were withdrawn while its value was kept, which
+ * also holds a value and offers nothing. The kind comes from the model and is written by the walk, so a
+ * position that has none is one no walk ever reached.
+ */
+function decided(choice) {
+  return choice.value !== undefined && !choice.kind && !choice.enumeration && choice.lowest === undefined;
+}
+
 function kindOf(choice) {
   if (choice.kind) {
     return choice.kind;
@@ -175,11 +206,11 @@ function notes(choice) {
 
   const told = [];
 
-  if (shownValue(choice.lowest, choice) > shownValue(choice.lowerBound, choice)) {
+  if (shownValue(choice.lowest) > shownValue(choice.lowerBound)) {
     told.push(text('div', 'wb-choice-note', 'ⓘ Numeric imprecision may cause the lower bound to be excluded.'));
   }
 
-  if (shownValue(choice.highest, choice) < shownValue(choice.upperBound, choice)) {
+  if (shownValue(choice.highest) < shownValue(choice.upperBound)) {
     told.push(text('div', 'wb-choice-note', 'ⓘ Numeric imprecision may cause the upper bound to be excluded.'));
   }
 
@@ -274,7 +305,7 @@ function spinner(choice, onChange) {
   control.setAttribute('role', 'spinbutton');
 
   if (choice.lowest !== undefined) {
-    control.placeholder = `${shownValue(choice.lowest, choice)} … ${shownValue(choice.highest, choice)}`;
+    control.placeholder = `${shownValue(choice.lowest)} … ${shownValue(choice.highest)}`;
     control.setAttribute('aria-valuemin', String(choice.lowest));
     control.setAttribute('aria-valuemax', String(choice.highest));
   }
@@ -285,7 +316,7 @@ function spinner(choice, onChange) {
 
   const write = (value) => {
     held = value;
-    control.value = value === undefined ? '' : String(shownValue(value, choice));
+    control.value = value === undefined ? '' : String(shownValue(value));
     control.setAttribute('aria-valuenow', value === undefined ? '' : String(value));
     control.setAttribute('aria-valuetext', control.value);
 

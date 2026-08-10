@@ -121,6 +121,26 @@
       { performer: 'Process_1', activities: [] }
     ];
 
+    // What a token held as it left, which every archive of a run keeps: the execution state forgets a token
+    // that is gone, so a record that read the running state would read nothing. The shape is what
+    // `sections(...)` yields, which is what the player freezes.
+    const LEFT_HOLDING = [
+      {
+        category: 'status',
+        label: 'Status',
+        rows: [
+          { id: 'Timestamp', name: 'timestamp', value: 14 },
+          { id: 'Attribute_load', name: 'load', value: 3.5 },
+          { id: 'Attribute_route', name: 'route', value: 'north' }
+        ]
+      },
+      {
+        category: 'data',
+        label: 'Data',
+        rows: [ { id: 'Attribute_capacity', name: 'capacity', value: 12 } ]
+      }
+    ];
+
     // a performer, three tokens queued under it; a second performer conducting one of its own; a third
     // standing at a process with nothing under it yet; and a fourth that has finished and closed, which is
     // the record the archive is about
@@ -354,6 +374,11 @@
     new MessagesPanel(injector, eventBus, messages, {});
     new DecisionsPanel(injector, eventBus, decisions, {});
 
+    // The run this page stands in for is a manual one, which is the only run that asks the reader anything:
+    // the offer to deliver, the arrows of an order and the controls of a choice are all controls of a manual
+    // run, and a page showing none of them would show none of what these tabs are for.
+    eventBus.fire('source.changed', { source: 'manual' });
+
     // written as the player writes them: the model's resolution first, then the records
     sequences.setModel(MODEL);
 
@@ -363,6 +388,9 @@
         sequences.open(args[0], args[1], COLORS[args[0]]);
       } else if (what === 'close') {
         sequences.close(args[0], args[1]);
+      } else if (what === 'archive') {
+        // as the player archives it, with the values the token held as it left
+        sequences.archive(args[0], { label: args[1], node: args[2] }, LEFT_HOLDING);
       } else {
         sequences[what](args[0], { label: args[1], node: args[2] });
       }
@@ -377,6 +405,7 @@
     messages.deliveredTo(DELIVERED,
       { instanceId: 'Instance_5', nodeId: 'Activity_2', color: COLORS.Instance_5 });
     messages.apply({ ...DELIVERED, state: 'DELIVERED' });
+    messages.freeze('Instance_5', 'Activity_2', LEFT_HOLDING); // the recipient went on and left
 
     messages.apply(WITHDRAWN, COLORS.Instance_4);
     messages.apply({ ...WITHDRAWN, state: 'WITHDRAWN' });
@@ -455,6 +484,13 @@
 
     decisions.open('Instance_1', 'DecisionTask_1');
     decisions.open('Instance_2', 'DecisionTask_2');
+
+    // and one the run has answered, written as the player writes it: the record says what was chosen, the
+    // token that chose it left, and what it carried away was frozen as it did
+    decisions.open('Instance_4', 'DecisionTask_1');
+    decisions.decided('Instance_4', 'DecisionTask_1', { mode: 'rail', duration: 16.333333 });
+    decisions.close('Instance_4', 'DecisionTask_1', COLORS.Instance_4);
+    decisions.freeze('Instance_4', 'DecisionTask_1', LEFT_HOLDING);
 
     // The walk runs again whenever the reader chooses, which is what the application does: a choice made is
     // exactly what makes the choices after it a different question. It is announced apart from the store

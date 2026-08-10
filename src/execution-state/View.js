@@ -160,7 +160,12 @@ function write(element, value) {
 
 const DECIMALS = 2;
 
-function format(value) {
+/**
+ * A value as a reader reads it, exported because a token entry is not the only place one is read: the
+ * Decisions tab writes what was chosen in these same lines, and a value written to six places there and to
+ * two here would be one value written two ways.
+ */
+export function format(value) {
   if (value === null || value === undefined) {
     return 'null';
   }

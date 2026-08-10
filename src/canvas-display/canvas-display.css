@@ -1,0 +1,99 @@
+/* The canvas display — top right: what a run has reached, one reading per chip, the clock above and the
+   objective below it. The right edge aligns with the toolbar (right: 8px) and the first chip's vertical
+   centre is aligned to the mode buttons from index.js. A light semi-transparent backdrop keeps a reading
+   legible over the diagram; the dark text matches the mode buttons. */
+
+.wb-canvas-display,
+.wb-canvas-display * {
+  box-sizing: border-box;
+}
+
+.wb-canvas-display {
+  position: absolute;
+  top: 20px;    /* fallback — the alignment is done in index.js against the mode buttons */
+  right: 8px;   /* right edge matches the toolbar (also right: 8px) */
+  z-index: 1500; /* above the canvas chrome; the chips pass the pointer through unless one is a control */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none; /* a passive display — never intercept canvas interaction */
+}
+
+/* one reading: its value, then the icon saying which reading it is */
+.wb-display-chip {
+  font-size: 24px; /* base scale — the 1em icon matches the 24px mode-toggle symbols; digits scale with it */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(248, 248, 249, 0.72); /* light, semi-transparent — legible without a heavy chip */
+  color: var(--bpmn-mode-icon, rgb(64, 64, 64)); /* same colour as the mode-button icons */
+  user-select: none;
+}
+
+/* right-aligned seven-segment readout (DSEG7 loaded in index.js; monospace fallback) */
+.wb-display-value {
+  font-family: 'DSEG7 Classic', 'Courier New', ui-monospace, monospace;
+  font-size: 1em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+}
+
+/* an icon sized to the digit height */
+.wb-display-icon {
+  display: block;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  /* the clock circle's stroke sits on the edge of its viewBox, so anything that scales the icon — the
+     waiting pulse — would have its outer edge clipped by the SVG viewport */
+  overflow: visible;
+}
+
+/* Which way the objective is read is the reader's, so its icon is a control: it takes the pointer within a
+   display that passes it through, and answers a hover in the accent the mode buttons use. */
+.wb-objective-sense {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  /* the button's font is the display's, not the browser's: an icon is sized in `em`, so a button left at
+     the user-agent's own size would draw an icon smaller than the clock's and carry the digits beside it
+     out of line with the clock's */
+  font: inherit;
+  line-height: 0;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.wb-objective-sense:hover {
+  color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
+/* While the reader advances time the clock is a control rather than a readout: it takes the pointer, says so
+   on hover in the accent the mode buttons use, and wears the cue a token wears when it waits for the reader
+   (`bts-pulse-pause`, from bpmn-js-animation's stylesheet) while the engine is waiting for a tick. */
+
+.wb-clock.wb-clock-interactive {
+  pointer-events: auto;
+  cursor: default;
+}
+
+/* A tick is offered only while the engine waits and the diagram has caught up — the waiting state. Before
+   that a click would be swallowed, so the clock neither invites one nor answers a hover. */
+.wb-clock.wb-clock-interactive.wb-clock-waiting {
+  cursor: pointer;
+}
+
+.wb-clock.wb-clock-interactive.wb-clock-waiting:hover {
+  color: var(--bpmn-mode-accent, hsl(205, 100%, 45%));
+}
+
+.wb-clock.wb-clock-waiting .wb-display-icon {
+  animation: bts-pulse-pause 1.8s infinite ease-in-out;
+}

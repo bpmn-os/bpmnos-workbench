@@ -26,8 +26,17 @@ import './input.css';
  * what the model knows: which columns a source declares, and a place to say so when a loaded file names
  * others.
  *
+ * What a table holds outlives the provider. A provider lives as long as a run does, and a reader going back
+ * to modelling ends the run, so the instance rows they typed and the files they read into the lookups would
+ * be gone every time they looked at the model. The text is therefore kept by whoever outlives a run and
+ * handed in here, under the key of the table it belongs to, and put back into the table of that key when the
+ * tables are built again. A lookup is keyed by the file the model reads it from, so a lookup the model no
+ * longer declares is never asked for, and one whose declared columns have changed restores nothing, the text
+ * naming columns the table no longer has.
+ *
  * @param {import('bpmn-js/lib/Modeler').default} modeler
  * @param {import('../engine/EngineRunner.js').default} runner  asked which lookup tables the model needs
+ * @param {Map<string, {csv: string, source: string?}>} [kept]  what each table held, across the runs
  * @returns {{
  *   element: Element,
  *   load: () => void,
@@ -38,7 +47,7 @@ import './input.css';
  *   destroy: () => void
  * }}
  */
-export default function createInput(modeler, runner) {
+export default function createInput(modeler, runner, kept = new Map()) {
   let tables = [];          // what the model asks for, in the order a host is to show it
   let tableListeners = [];  // called whenever that set changes, which is whenever a model is read
 
@@ -46,6 +55,7 @@ export default function createInput(modeler, runner) {
   let sources = {};         // lookup-table name -> its `source` filename as declared in the BPMN XML
   let functions = {};       // `source` filename -> the `name` the model looks that table up through
   let headers = {};         // lookup-table name -> its declared `header` (semicolon-separated column names)
+  let frozen = false;       // a run is on, so the tables state what it was given rather than take a change
   let instanceField = null; // the instance grid field
   let lookupFields = {};    // lookup-table name -> its grid field
   let listeners = [];       // called whenever what the input holds changes
@@ -89,6 +99,16 @@ export default function createInput(modeler, runner) {
     return Object.fromEntries(
       Object.entries(lookupFields).map(([ name, field ]) => [ name, field.getCsv() ])
     );
+  }
+
+  /**
+   * Whether the tables are the reader's to change. What a run is given cannot change under it — a change
+   * gives the run up rather than amending it — so the tables state what this run was given while it is on,
+   * and are editable again once it is over, the next run being given whatever they hold then.
+   */
+  function setReadOnly(on) {
+    frozen = !!on;
+    tables.forEach((table) => table.setReadOnly(frozen));
   }
 
   function destroy() {
@@ -206,9 +226,10 @@ export default function createInput(modeler, runner) {
   // this panel knows: which columns the model declares for this source, and where to say so when a loaded
   // file names others. A file so refused leaves the table as it was, and the complaint stands until
   // something changes, an edit included, since the message is about a file and not about the rows.
-  function makeTableField({ key, name, filename, source, columns }) {
+  function makeTableField({ key, name, filename, source: declared, columns }) {
     const element = domify('<div></div>');
     const complaint = domify('<div class="wb-input-error" hidden></div>'); // shown after a header mismatch
+    const held = kept.get(key);
 
     const table = createTableEntry({
       columns: columns.slice(),
@@ -217,8 +238,14 @@ export default function createInput(modeler, runner) {
       // A cap would put a scrollbar inside a scrollbar and leave the column half empty whenever the window
       // is tall.
       filename,
-      onChange: () => { complaint.hidden = true; changed(); },
-      onLoad: (loaded) => { field.source = loaded; tablesChanged(); },
+      clearable: true,
+      readOnly: frozen,
+      onChange: () => { complaint.hidden = true; keep(field); changed(); },
+      onLoad: (loaded) => { field.source = loaded; keep(field); tablesChanged(); },
+      // A table emptied is read from nothing: what it is read from is what put those rows there, and the
+      // rows are gone. A lookup falls back to the file the model declares for it, which is what the model
+      // says whatever the table holds.
+      onClear: () => { field.source = declared; keep(field); tablesChanged(); },
       onError: (message) => { complaint.hidden = false; complaint.textContent = message; }
     });
 
@@ -228,15 +255,31 @@ export default function createInput(modeler, runner) {
     const field = {
       key,
       name,
-      source,
+      source: declared,
       element,
+      setReadOnly: table.setReadOnly,
       getCsv: () => table.getCsv(),
       rowCount: () => table.getRows().filter(row => !isEmptyRow(row)).length // ignore blank rows for "ready"
     };
 
+    // What was in this table when it was last built, where the table is still the same table. A run ends and
+    // its columns are taken away whenever the reader goes back to modelling, and what they typed or read in
+    // would go with them; it is held outside this provider, which lives only as long as a run, and put back
+    // here. `setCsv` refuses text naming other columns, so a header that has changed under it restores
+    // nothing, which is the answer the row would otherwise have had to be checked for.
+    if (held && table.setCsv(held.csv)) {
+      field.source = held.source;
+    }
+
     tables.push(field);
 
     return field;
+  }
+
+  // A table's content, kept under what the table is of. A lookup is keyed by the file the model reads it
+  // from, so a lookup the model no longer declares is simply never asked for again.
+  function keep(field) {
+    kept.set(field.key, { csv: field.getCsv(), source: field.source });
   }
 
   return {
@@ -248,6 +291,7 @@ export default function createInput(modeler, runner) {
     getInstances,
     getLookups,
     onChange,
+    setReadOnly,
     destroy
   };
 }

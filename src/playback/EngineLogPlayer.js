@@ -384,6 +384,14 @@ EngineLogPlayer.prototype._applyEvent = async function(event) {
   // A delivery is announced as a decision where the run decided it and as an event where a caller forced it,
   // and the two are the same fact under two names, `decision` and `event`. Both carry the colour of the
   // token that took it, read while it is still drawn, because the record outlives the token.
+  // What the run chose, which is the truth about a decision in either mode: a greedy run is asked by nobody
+  // and this is the only thing that says what it did, and a manual run restates what the reader entered. It
+  // is applied as it is replayed, so the values appear as the diagram reaches the task rather than whenever
+  // an engine that has run on ahead is asked.
+  if (event.decision === 'choice' && !event.expired && this._decisions && event.choices) {
+    this._decisions.decided(event.instanceId, event.nodeId, event.choices);
+  }
+
   const delivery = event.decision === 'messagedelivery' || event.event === 'messagedelivery';
 
   if (delivery && !event.expired && this._messages && event.message) {
@@ -713,16 +721,49 @@ EngineLogPlayer.prototype._apply = function(record) {
   // request stands while the token is busy at the task, and any state past that is the run having moved on,
   // whether the choices were made or the token did not survive to make them.
   if (this._decisions && record.nodeId && record.state !== 'BUSY') {
-    this._decisions.close(record.instanceId, record.nodeId);
+    this._decisions.close(record.instanceId, record.nodeId, this._colorOf(record.instanceId));
+  }
+
+  // A token leaving takes its values with it: the execution state forgets it, and every record about it —
+  // what it decided, what it received — would disclose nothing from then on. So what it held is frozen here,
+  // as it is frozen for the token a performer performed for, and by the same rule, the first record in which
+  // it reports leaving.
+  if (record.nodeId && FINAL.includes(record.state)) {
+    const values = this._valuesOf(record.nodeId, record.instanceId);
+
+    if (this._decisions) {
+      this._decisions.freeze(record.instanceId, record.nodeId, values);
+    }
+    if (this._messages) {
+      this._messages.freeze(record.instanceId, record.nodeId, values);
+    }
   }
 };
+
+// The states in which a token is finished at the node it stands at, and the three are mutually exclusive: it
+// completed there, it failed there, or it was withdrawn from it. What it holds then is what it takes away,
+// whichever route it leaves by: a task exits and then departs or is done, and an intermediate catching event
+// departs or is done from COMPLETED without exiting at all, so COMPLETED is the one state both pass through
+// and EXITING is a route of one of them.
+//
+// A loop activity comes back and completes again, so what is kept is what the token held the last time.
+const FINAL = [ 'COMPLETED', 'FAILED', 'WITHDRAWN' ];
+
+// The states in which a token has left the activity it stood at, which is when a performer is done with it.
+// It is a later moment than being finished there: the engine releases the performer on the exit event, so a
+// token that has completed still occupies it, and a token that failed or was withdrawn left without exiting.
+const LEFT = [ 'EXITING', 'DEPARTED', 'DONE', 'FAILED', 'WITHDRAWN' ];
 
 // --- the sequential performers ----------------------------------------------
 //
 // A performer is the token standing at a node that performs, and it performs for as long as that token is
 // busy, which is for as long as the scope it stands in runs. A token at one of its activities queues on
 // READY, is the one being conducted from ENTERED, and is archived once it exits, staying where it stood as
-// a record of what the performer did. Which activities belong to
+// a record of what the performer did.
+//
+// It is archived as it leaves and not as it completes, which are two moments: the engine releases the
+// performer on the exit event, so a token that has completed is still the one being conducted and the
+// performer is still occupied by it. Which activities belong to
 // which performer is what the model resolved and what the store was given; which token performs for this
 // one is the token tree, climbed here because the animation holds it.
 EngineLogPlayer.prototype._applySequence = function(record) {
@@ -767,8 +808,7 @@ EngineLogPlayer.prototype._applySequence = function(record) {
     this._sequences.queue(key, token);
   } else if (state === 'ENTERED') {
     this._sequences.conduct(key, token);
-  } else if (state === 'EXITING' || state === 'DEPARTED' || state === 'DONE' ||
-             state === 'FAILED' || state === 'WITHDRAWN') {
+  } else if (LEFT.includes(state)) {
     // An archived row is a record rather than a token: what it holds is frozen here, as the token leaves,
     // since the execution state forgets a token that is gone and the row would otherwise disclose nothing.
     this._sequences.archive(key, token, this._valuesOf(node, label));

@@ -14,39 +14,37 @@
  * as they arrive. What this module concerns is only the third thing, the multiples of the step, which are
  * `lowest` and `highest`; no rounding here stands for a type, and none stands for a bound.
  *
- * The engine holds every number as a binary fixed-point value, so a step written as a tenth or a third is
- * held slightly beside the number written. The multiples therefore fall slightly beside the round numbers a
- * reader would expect, and the least and the greatest of them need not be the bounds at all. A reader is
- * shown the grid rounded to a precision they could have written; what is submitted is the value itself.
- * Everything here works in the values, and only `precisionOf` concerns what is shown.
+ * A value is written to the engine's own precision, which is what a reader may write and what the engine
+ * may hold, the two being the same thing. `BPMNOS::number` is a decimal fixed-point value with six places,
+ * so every value the engine holds is an exact multiple of a millionth and every such number can be written
+ * exactly. A step of a tenth is a tenth and a third is 0.333333, and the multiples of a step are the round
+ * numbers a reader expects rather than something slightly beside them.
+ *
+ * What remains is that the least and the greatest multiple need not be the bounds, the grid being counted
+ * from zero: a choice bounded by one and ten in thirds begins at 1.333332. That is a real difference and
+ * not a rounding, and it is what `lowest` and `highest` say.
+ *
+ * A number carried through JavaScript is a double and is not exact, so a millionth written as one is
+ * arithmetic away from one, and the values are compared with a tolerance far below what is ever shown.
  *
  * Nothing here touches a document, so a grid is walked under `node --test` without one.
  */
 
 /**
- * How many decimals a value of this choice is written to.
- *
- * A reader is shown a number they could have written, not the one the engine holds: 1.01 rather than
- * 1.0099945068359375. Two decimals are enough for that, and are the most that is shown. Where the step is
- * finer than that, more are needed, since two adjacent values would otherwise be written alike and the
- * reader could neither tell them apart nor reach one of them.
+ * The engine's own precision: `BPMNOS::number` is a decimal fixed-point value with six places, so this is
+ * both as fine as it can hold and as fine as it is worth writing.
  */
-export function precisionOf(choice) {
-  const step = choice.multipleOf;
+export const PRECISION = 6;
 
-  if (step === undefined || step >= 0.01) {
-    return 2;
-  }
-
-  return Math.min(MAX_PRECISION, Math.ceil(-Math.log10(step)));
-}
-
-/** As far as a value is ever written, beyond which the engine's own precision runs out in any case. */
-const MAX_PRECISION = 6;
-
-/** A value as it is written for a reader of this choice. */
-export function shownValue(value, choice) {
-  return Number(value.toFixed(precisionOf(choice)));
+/**
+ * A value as it is written.
+ *
+ * It is written to the engine's precision and no coarser, so that what a reader reads is what the engine
+ * holds. Trailing zeros go, a value being a number rather than a field of six decimals: five is written as
+ * five and a third of ten as 3.333333.
+ */
+export function shownValue(value) {
+  return Number(value.toFixed(PRECISION));
 }
 
 /** Whether a choice has a grid to walk, which is what makes a step, and an arrow, mean anything. */

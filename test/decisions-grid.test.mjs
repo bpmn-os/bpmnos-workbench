@@ -1,11 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { admits, next, precisionOf, shownValue, snap, walkable } from '../src/decisions/grid.js';
+import { admits, next, PRECISION, shownValue, snap, walkable } from '../src/decisions/grid.js';
 
-// A third, as the engine holds it: every number is a binary fixed-point value at a scale of two to the
-// minus sixteen, so a third is 21845/65536 and three of them fall just short of one.
-const THIRD = 21845 / 65536;
+// A third, as the engine holds it: every number is a decimal fixed-point value with six places, so a third
+// is 0.333333 exactly and three of them fall just short of one. The values here are the engine's own, and
+// the model they answer is the one the probe of `1 <= x <= 10, 1/3 | x` reported.
+const THIRD = 0.333333;
 
 /** `0 <= x <= 1, 1/3 | x`, as the bridge answers it. */
 const SHARE = {
@@ -46,15 +47,16 @@ describe('what a choice offers to walk', () => {
 
 describe('the precision a value is written to', () => {
 
-  it('is two decimals, which is what a reader writes', () => {
-    assert.equal(precisionOf(SHARE), 2);
-    assert.equal(precisionOf({ multipleOf: 0.5 }), 2);
-    assert.equal(precisionOf({}), 2);
+  it('is the engine\'s own, so that what is read is what is held', () => {
+    assert.equal(PRECISION, 6, 'a decimal fixed-point value with six places');
+    assert.equal(shownValue(4 * THIRD), 1.333332);
+    assert.equal(shownValue(30 * THIRD), 9.99999);
   });
 
-  it('is finer where a step finer than that would write two values alike', () => {
-    assert.equal(precisionOf({ multipleOf: 0.001 }), 3);
-    assert.equal(precisionOf({ multipleOf: 1e-9 }), 6, 'and no finer than the engine itself holds');
+  it('loses the arithmetic a double carries, and nothing a reader could write', () => {
+    assert.equal(shownValue(9.999998999999999), 9.999999);
+    assert.equal(shownValue(5), 5, 'a value is a number rather than a field of six decimals');
+    assert.equal(shownValue(0.1 + 0.2), 0.3);
   });
 });
 
@@ -138,16 +140,18 @@ describe('walking the grid', () => {
 
 describe('what a reader is shown', () => {
 
-  it('is the grid written to a precision they could have written', () => {
+  // Base ten is what makes these the same list: the engine holds a third as 0.333333, so every value it
+  // admits can be written exactly, and a reader who writes what they read writes a value the engine holds.
+  it('is the grid itself, the engine holding no value a reader could not write', () => {
     assert.deepEqual(
-      [ 0, THIRD, 2 * THIRD, 3 * THIRD ].map((value) => shownValue(value, SHARE).toFixed(2)),
-      [ '0.00', '0.33', '0.67', '1.00' ]);
+      [ 0, THIRD, 2 * THIRD, 3 * THIRD ].map((value) => shownValue(value)),
+      [ 0, 0.333333, 0.666666, 0.999999 ]);
   });
 
   it('settles back on the value behind it when they write it', () => {
-    assert.equal(snap(0.33, SHARE), THIRD);
-    assert.equal(snap(0.67, SHARE), 2 * THIRD);
-    assert.equal(snap(1.00, SHARE), 3 * THIRD);
+    assert.equal(snap(0.333333, SHARE), THIRD);
+    assert.equal(snap(0.666666, SHARE), 2 * THIRD);
+    assert.equal(snap(0.999999, SHARE), 3 * THIRD);
   });
 });
 

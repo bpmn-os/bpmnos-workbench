@@ -110,6 +110,16 @@ export class Messages extends MessageStore {
     return key;
   }
 
+  freeze(instanceId, nodeId, values) {
+    const frozen = super.freeze(instanceId, nodeId, values);
+
+    if (frozen) {
+      this._eventBus.fire('messages.changed', {});
+    }
+
+    return frozen;
+  }
+
   forget(key) {
     const forgotten = super.forget(key);
 

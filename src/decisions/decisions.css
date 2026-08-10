@@ -164,6 +164,9 @@
   opacity: 0.55;
 }
 
-.wb-choice-readonly .wb-choice-control {
-  cursor: default;
+/* A choice that has been made, drawn as a token's attribute is: the name and the value on one line. It
+   needs nothing of its own but the room a choice would have taken, the `wb-attribute` lines being the
+   Tokens tab's and shared with every panel that shows what a token holds. */
+.wb-choice-made {
+  padding: 2px 0;
 }

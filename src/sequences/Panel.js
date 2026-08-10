@@ -1,9 +1,9 @@
-import {
-  createCollapsibleEntry, createOrderedListEntry, createSimpleEntry, DELETE_ICON
-} from 'bpmn-js-side-panel';
+import { createOrderedListEntry, createSimpleEntry, DELETE_ICON } from 'bpmn-js-side-panel';
 
 import { processOf, tokenAt } from '../animation-tokens.js';
+import answerable from '../answerable.js';
 import createArchiveToggle from '../archive-toggle.js';
+import renderFrozenValues from '../frozen-values.js';
 import addFilter from '../panel-filter.js';
 import { selectionFor } from '../token-rows/select.js';
 import { DIVIDER } from './Store.js';
@@ -39,6 +39,9 @@ export default function SequencesPanel(injector, eventBus, sequences, config) {
   this._open = new Map(); // which performers a reader has expanded, kept as the list is drawn again
   this._filter = 'all';   // which performers are listed: all of them, or those a selected token concerns
   this._showArchived = true; // whether what the run has finished with is listed with what it is still doing
+
+  // An order is the reader's only where the run asks them for one, which is a manual run and nothing else.
+  this._answerable = answerable(eventBus, () => this._render());
 
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('sequences.changed', () => this._render());
@@ -313,9 +316,13 @@ SequencesPanel.prototype._kind = function(node) {
  * is read against.
  */
 SequencesPanel.prototype._list = function(performer) {
+  // The arrows show only where the order is the reader's to give. A run that decides for itself takes the
+  // activities in the order it decides on, and a list a reader could rearrange there would rearrange
+  // nothing.
   const list = createOrderedListEntry({
     id: performer.key,
     side: 'left',
+    reordering: this._answerable(),
     onReorder: (keys) => this._sequences.setOrder(performer.key, keys)
   });
 
@@ -393,37 +400,11 @@ SequencesPanel.prototype._row = function(performer, key, archived) {
 };
 
 /**
- * What an archived row discloses: the values the token held as it left, in the sections a token entry shows
- * them in, drawn as the execution state's own view draws them. They are frozen, so nothing is kept current
- * here and nothing needs to be.
+ * What an archived row discloses: the values the token held as it left, drawn as every archive of this
+ * application draws them.
  */
 SequencesPanel.prototype._frozen = function(performer, key, contentEl) {
-  const held = this._sequences.archivedValues(performer.key, key);
-
-  if (!held) {
-    return;
-  }
-
-  held.forEach((section) => {
-    const entry = createCollapsibleEntry({ label: section.label, open: true, caretSide: 'left' });
-
-    section.rows.forEach(({ name, value }) => {
-      const line = document.createElement('div'),
-            nameEl = document.createElement('span'),
-            valueEl = document.createElement('span'),
-            unset = value === null || value === undefined;
-
-      line.className = 'wb-attribute';
-      nameEl.className = 'wb-attribute-name';
-      valueEl.className = 'wb-attribute-value' + (unset ? ' wb-attribute-null' : '');
-      nameEl.textContent = name;
-      valueEl.textContent = unset ? 'undefined' : String(value);
-      line.append(nameEl, valueEl);
-      entry.contentEl.appendChild(line);
-    });
-
-    contentEl.appendChild(entry.element);
-  });
+  renderFrozenValues(this._sequences.archivedValues(performer.key, key), contentEl);
 };
 
 /**
@@ -435,7 +416,7 @@ SequencesPanel.prototype._forgetPerformer = function(performer) {
 
   button.type = 'button';
   button.className = 'bjs-collapsible-entry-control wb-forget';
-  button.title = 'Forget this performer';
+  button.title = 'Remove from archive';
   button.innerHTML = DELETE_ICON;
   button.addEventListener('click', (event) => {
     event.stopPropagation(); // the row selects its token; this takes the record away
@@ -451,7 +432,7 @@ SequencesPanel.prototype._forget = function(performer, key) {
 
   button.type = 'button';
   button.className = 'bjs-collapsible-entry-control wb-forget';
-  button.title = 'Forget this token';
+  button.title = 'Remove from archive';
   button.innerHTML = DELETE_ICON;
   button.addEventListener('click', () => this._sequences.forget(performer.key, key));
 

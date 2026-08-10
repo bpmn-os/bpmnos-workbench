@@ -102,8 +102,14 @@ export default class DecisionStore {
    * It is named by its token rather than by its key, as opening it is, because the player speaks the
    * identities a record carries and holds no key of its own. What the reader does afterwards is keyed,
    * since a panel draws from the store and the key is what it drew.
+   *
+   * The colour the token was drawn in is kept with it, since the record outlives the token: a run that has
+   * moved on holds no token to ask, and a record redrawn afterwards would lose the one thing that says whose
+   * decision it was.
+   *
+   * @param {string} [color]  the colour that token was drawn in
    */
-  close(instanceId, nodeId) {
+  close(instanceId, nodeId, color) {
     const key = keyOf(instanceId, nodeId),
           held = this._decisions.get(key);
 
@@ -113,8 +119,62 @@ export default class DecisionStore {
 
     held.archived = true;
     held.awaited = false;
+    held.color = color || held.color || null;
 
     return true;
+  }
+
+  /**
+   * What the run chose, as the record announcing the decision says it: the attributes of the task in the
+   * order it states them, each with the value taken.
+   *
+   * This is the truth about a decision in either mode. A greedy run decides for itself and no reader is
+   * asked, so the record is the only thing that says what happened; a manual run decides what the reader
+   * entered, so the record restates it and the two agree. It is a record, so it arrives in the order the
+   * diagram shows, which is what nothing else about a decision can promise: what a choice may take can only
+   * be asked of an engine that has usually run far ahead of what is drawn.
+   *
+   * A value is written into the position the attribute holds, so whatever was learnt about what that choice
+   * may take stands beside it. A position nothing is known of is created from the record alone, which is
+   * what a greedy run leaves: an attribute and the value it took, with nothing to choose among.
+   *
+   * @param {string} instanceId
+   * @param {string} nodeId
+   * @param {Object} values  the chosen value by attribute name, in the order the choices are stated
+   */
+  decided(instanceId, nodeId, values) {
+    const key = keyOf(instanceId, nodeId),
+          held = this._decisions.get(key);
+
+    if (!held) {
+      return false;
+    }
+
+    let changed = false;
+
+    Object.entries(values || {}).forEach(([ attribute, value ], index) => {
+      const choice = held.choices[index];
+
+      if (!choice) {
+        held.choices[index] = { attribute, value };
+        changed = true;
+
+        return;
+      }
+
+      if (choice.attribute !== attribute || choice.value !== value) {
+        choice.attribute = attribute;
+        choice.value = value;
+        changed = true;
+      }
+    });
+
+    if (!held.complete) {
+      held.complete = true;
+      changed = true;
+    }
+
+    return changed;
   }
 
   /** Whether a decision has been settled, and is therefore a record rather than a question. */
@@ -218,6 +278,39 @@ export default class DecisionStore {
     held.awaited = false;
 
     return true;
+  }
+
+  /**
+   * The values the token held as it left the decision task, kept with the record of what was decided.
+   *
+   * A record outlives its token: the execution state forgets a token that is gone, so a record disclosing
+   * the running state would disclose nothing a moment after it was made. What was chosen is half of what a
+   * reader wants of such a record, the other half being what the token carried away with it.
+   *
+   * They are taken as the token leaves and not as the decision is closed, a decision being settled while its
+   * token still stands at the task and doing what it decided afterwards. Until then the record holds none
+   * and the token is shown as it is. A token leaving a loop activity leaves it once per loop, and what it
+   * held the last time is what it carried away.
+   *
+   * @param {Array} values  the sections as a token entry shows them
+   */
+  freeze(instanceId, nodeId, values) {
+    const held = this._decisions.get(keyOf(instanceId, nodeId));
+
+    if (!held || !values) {
+      return false;
+    }
+
+    held.frozen = values;
+
+    return true;
+  }
+
+  /** The values a decision froze as its token left, or nothing while it holds none. */
+  frozenValues(key) {
+    const held = this._decisions.get(key);
+
+    return (held && held.frozen) || null;
   }
 
   /** The values entered so far, in order, up to the first that is not set. */
