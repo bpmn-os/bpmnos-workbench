@@ -49,7 +49,7 @@ export function modeIcon(glyph, source) {
     + '</svg>';
 }
 
-export default function createModeButtons(modeler, greedy, manual, runControls) {
+export default function createModeButtons(modeler, liveRun, runControls) {
   const mode = modeler.get('mode');
   const eventBus = modeler.get('eventBus');
   const canvas = modeler.get('canvas');
@@ -89,27 +89,40 @@ export default function createModeButtons(modeler, greedy, manual, runControls) 
 
   async function setSource(requested) {
     const next = requested === source ? null : requested; // clicking the active source returns to Model
+    const live = (next === 'manual' || next === 'greedy');
+    const wasLive = (source === 'manual' || source === 'greedy');
+
+    // Between the two live modes the run is kept: they are one run differing in which dispatchers answer,
+    // so the mode is turned over and the engine carries on from where the reader is looking. Every other
+    // switch is a fresh session and does what the panel's Refresh does — the run ends, the tokens are
+    // cleared, and the refresh is announced, whereupon the source gives up its run and the clock blanks.
+    if (live && wasLive) {
+      source = next;
+      liveRun && liveRun.setMode(source);
+      render();
+      announce();
+      return;
+    }
+
     if (next !== source) {
       await refreshSession();
     }
     source = next;
-    if (source === 'manual') {
-      greedy && greedy.deactivate();
-      mode.setMode('playback'); // editing off + token rendering; the run is driven by the user
-      manual && manual.activate();
-    } else if (source === 'greedy') {
-      manual && manual.deactivate();
-      mode.setMode('playback'); // editing off + token rendering; greedy adds its Input tab
-      greedy && greedy.activate();
+    if (live) {
+      mode.setMode('playback'); // editing off + token rendering; the live run adds its Input tab
+      liveRun && liveRun.activate(source);
     } else if (source === 'playback') {
-      manual && manual.deactivate();
-      greedy && greedy.deactivate();
+      liveRun && liveRun.deactivate();
       mode.setMode('playback');
     } else {
-      manual && manual.deactivate();
-      greedy && greedy.deactivate();
+      liveRun && liveRun.deactivate();
       mode.setMode('model');
     }
+    announce();
+    render();
+  }
+
+  function announce() {
     // Greedy and manual produce the engine's log, so there is nothing to read into them and the load
     // control is greyed; playback replays a file, so it is the one that may act. Both are the animation's
     // `play` mode, which cannot tell them apart, so the workbench says which.
@@ -119,7 +132,6 @@ export default function createModeButtons(modeler, greedy, manual, runControls) 
     // The mode service knows `model` and `playback`, and all three sources are the latter to it, so what
     // tells them apart is announced here: whatever needs to know which source is running listens for this.
     eventBus.fire('source.changed', { source });
-    render();
   }
 
   buttons.forEach(b => domEvent.bind(b, 'click', () => setSource(b.getAttribute('data-source'))));

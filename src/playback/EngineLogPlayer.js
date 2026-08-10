@@ -256,9 +256,11 @@ EngineLogPlayer.prototype.play = async function(log) {
   }
   this._aborted = false;
   this._paused = false;
-  this._time = 0; // the simulation starts at time 0; the clock reads 0 until the first clock tick (1)
+  // the run states its own starting instant: its stream opens with the clock tick that begins it, so the
+  // clock reads nothing until that record is applied rather than assuming a run begins at zero
+  this._time = null;
   this._animation.clear();
-  this._setState('playing'); // fires playback.changed → the clock picks up the 0
+  this._setState('playing'); // fires playback.changed → the clock reads as unknown until the first tick
 
   const entries = this._log;
   this._run = (async () => {

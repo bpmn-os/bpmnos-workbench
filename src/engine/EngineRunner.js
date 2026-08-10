@@ -14,6 +14,12 @@
  *   enqueue(event, payload)  → Promise<Step>    queue what the user decided, then let it advance again
  *   stop()                   → Promise<void>    end the run and free the engine
  *
+ * and the same engine driven one event at a time, which is what lets a mode change land where the reader is
+ * looking, the engine never being further ahead than what the page has drawn:
+ *
+ *   initialize(csv, seed, greedy) → Promise<Step>  begin a run without carrying it forward
+ *   advance()                     → Promise<Step>  one fetched event; `advanced` says whether to ask again
+ *
  * where Step is `{ entries, alive, time, objective }`. The entries are the records the engine produced,
  * and they are all a page learns of what a run does: the engine's present runs far ahead of the diagram,
  * so what the page shows follows the records it has drawn rather than the state the engine is in. What the
@@ -51,6 +57,35 @@ export default class EngineRunner {
 
   start(instances, seed) {
     return this._request('step', { type: 'start', instances, seed });
+  }
+
+  /**
+   * Begin a run without carrying it forward, in either mode: one composition, with what only a greedy run
+   * adds silenced where `greedy` is false. It answers the run's opening records — the clock tick that
+   * states the instant it begins at — and the seed it was given or drew.
+   */
+  initialize(instances, seed, greedy) {
+    return this._request('step', { type: 'initialize', instances, seed, greedy });
+  }
+
+  /**
+   * Carry the run forward by one fetched event and answer what it produced. The Step's `advanced` says
+   * whether it may be asked again: false where nothing was fetched, where the run was told to stop, or
+   * where a clock tick left nothing to advance. Asking one event at a time is what keeps the engine from
+   * running ahead of what the page has drawn, and therefore what lets a mode change land where the reader
+   * is looking.
+   */
+  advance() {
+    return this._request('step', { type: 'advance' });
+  }
+
+  /**
+   * Change what the run decides for itself, without starting it over. The mode is which of the
+   * composition's dispatchers speak, so it turns over between fetches; what was silent has gone on
+   * observing and answers from an up-to-date set at the very next advance.
+   */
+  setMode(greedy) {
+    return this._request('step', { type: 'setMode', greedy });
   }
 
   /**

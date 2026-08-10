@@ -15,8 +15,8 @@
     "./engine": "./src/engine/EngineRunner.js",
     "./input": "./src/input/index.js",
     "./input/input.css": "./src/input/input.css",
-    "./greedy": "./src/greedy/index.js",
-    "./greedy/*": "./src/greedy/*"
+    "./live": "./src/live/index.js",
+    "./live/*": "./src/live/*"
   },
   "scripts": {
     "dev": "vite",

@@ -9,31 +9,38 @@
 // monitor entries arrive in one synchronous burst inside `run`, so we collect them here and hand the page
 // the complete log in the `done` message.
 //
-// What a run decides for itself is the controller's composition rather than a mode of the engine, so a
-// greedy run is composed of every deciding dispatcher and a clock, and a run the user drives leaves out
-// what it is to be asked about.
+// What a run decides for itself is which of its controller's dispatchers answer, rather than a mode of the
+// engine. Both modes are therefore one composition: a greedy run lets every dispatcher of it speak, and a
+// manual run silences the two that decide and the clock, so that what the reader is to be asked about
+// reaches the page and time advances only when the reader says so.
 
 import createBPMNOS from '@bpmn-os/bpmnos-wasm';
 
-// Every decision settles itself and the clock advances on its own, so a run needs nothing from the page.
-// `EnqueuedEvents` precedes `TimeWarp` because a clock answers every fetch: behind it, nothing the page
-// enqueues — a termination, say — would ever be dispatched.
-const GREEDY = [
+// One composition serves both modes. A run is greedy or manual by which of its dispatchers answer, and that
+// is a property the controller turns over between fetches, so nothing is rebuilt when the mode changes and
+// a run survives it.
+//
+// A position is a precedence, and `EnqueuedEvents` comes first because it is what the page says while
+// everything behind it is what the run settles for itself: ahead of the deciders, a termination ends the run
+// when it is given rather than at the first fetch where none of them has anything to say, and what the
+// reader answers is dispatched before anything automatic settles something else. It costs nothing at the
+// fetches where it is empty. `TimeWarp` is last because a clock answers every fetch, so nothing behind it
+// would ever be reached.
+const COMPOSITION = [
+  'EnqueuedEvents',
   'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage',
-  'FirstEnumeratedChoice', 'CompetingCandidates', 'EnqueuedEvents', 'TimeWarp'
+  'FirstEnumeratedChoice', 'CompetingCandidates', 'TimeWarp'
 ];
 
-// The user advances time, decides which message is delivered to whom, and orders what each sequential
-// performer takes on next; the rest still settles itself. `SequentialEntries` has left this list, the
-// Sequences tab now answering the entry of a child of a sequential ad hoc subprocess from the order it
-// holds. `InstantDirectMessage` stays, an addressed delivery being no decision. Each dispatcher leaves
-// this list as its panel arrives.
+// The dispatchers only a greedy run lets speak: the two that decide, because in a manual run the reader
+// decides, and the clock, because the reader ticks it and the engine is to stand still until they do.
+// `SequentialEntries` is in neither, the Sequences tab answering the entry of a child of a sequential ad hoc
+// subprocess from the order it holds, and `InstantDirectMessage` speaks in both, an addressed delivery being
+// no decision. Each dispatcher joins this list as its panel arrives.
 //
-// There is no clock among them, which is what makes the run manual: the engine advances only as far as it
-// can and then stands still until the page enqueues a tick.
-const INTERACTIVE = [
-  'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage', 'EnqueuedEvents'
-];
+// The positions are read from the composition rather than written down, so reordering it moves them too.
+const GREEDY_ONLY = [ 'FirstEnumeratedChoice', 'CompetingCandidates', 'TimeWarp' ]
+  .map(name => COMPOSITION.indexOf(name));
 
 const ready = createBPMNOS();
 ready.then(() => self.postMessage({ type: 'ready' })).catch(err =>
@@ -49,6 +56,41 @@ let lookupTables = {};
 // answer, since the engine notifies synchronously while it runs and nothing can be posted meanwhile.
 let session = null; // { engine, monitor, controller, entries }
 
+// Builds what a session drives: one composition, with what only a greedy run adds silenced where the mode is
+// manual. The engine is left as constructed and is not carried forward here, since how far it runs is the
+// caller's business — `start` runs it as far as it goes, `initialize` leaves it standing at its first
+// instant. A previous session is replaced.
+function beginSession(instances, seed, greedy) {
+  endSession();
+
+  const input = new Module.Input(modelXml);
+  for (const [ name, csv ] of Object.entries(lookupTables)) {
+    input.addLookupTable(name, csv);
+  }
+  input.setInstance(instances);
+
+  const entries = [];
+  const monitor = new Module.Monitor();
+  monitor.addObserver((entryJson) => entries.push(JSON.parse(entryJson)));
+
+  // Silencing withholds nothing but dispatching, so what is silent goes on observing and is correct the
+  // moment the mode turns over. A manual run therefore stops wherever it can fetch no event, and time
+  // advances only by what the page queues.
+  const controller = new Module.Controller(JSON.stringify({ dispatchers: COMPOSITION }));
+  if (!greedy) {
+    for (const index of GREEDY_ONLY) {
+      controller.deactivate(index);
+    }
+  }
+
+  // the caller owns the seed (Refresh re-rolls it); fall back to a random one if none was supplied
+  const chosenSeed = Number.isFinite(seed) ? seed : Math.floor(Math.random() * 0x7fffffff);
+  const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed: chosenSeed }), controller, monitor);
+  input.delete();
+
+  session = { engine, monitor, controller, entries, seed: chosenSeed };
+}
+
 function endSession() {
   if (!session) {
     return;
@@ -62,14 +104,15 @@ function endSession() {
 // What the page is told after every step: the records the engine produced, whether it is still running,
 // and where its clock stands. What a run does reaches the page as records and as nothing else: the engine's
 // present is far ahead of the diagram, so a page that drew from it would show what it has not yet played.
-function report() {
+function report(extra) {
   const entries = session.entries.splice(0); // in place: the monitor's observer holds this array
   self.postMessage({
     type: 'step',
     entries,
     alive: session.engine.isAlive(),
     time: session.engine.getCurrentTime(),
-    objective: session.engine.getWeightedObjective()
+    objective: session.engine.getWeightedObjective(),
+    ...extra
   });
 }
 
@@ -129,12 +172,13 @@ self.onmessage = async (event) => {
 
       // the caller owns the seed (Refresh re-rolls it); fall back to a random one if none was supplied
       const seed = Number.isFinite(message.seed) ? message.seed : Math.floor(Math.random() * 0x7fffffff);
-      const controller = new Module.Controller(JSON.stringify({ dispatchers: GREEDY }));
+      // greedy: every dispatcher of the composition speaks, so the run settles everything itself
+      const controller = new Module.Controller(JSON.stringify({ dispatchers: COMPOSITION }));
       const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), controller, monitor);
       input.delete();
 
       const startedAt = performance.now();
-      engine.run(0); // the greedy composition decides everything itself and TimeWarp advances its clock
+      engine.run(0); // the deciders settle every decision and TimeWarp advances the clock
       const engineMs = performance.now() - startedAt;
 
       const done = {
@@ -158,28 +202,52 @@ self.onmessage = async (event) => {
         self.postMessage({ type: 'error', error: 'no model loaded' });
         return;
       }
-      endSession(); // a previous manual run is replaced
-
-      const input = new Module.Input(modelXml);
-      for (const [ name, csv ] of Object.entries(lookupTables)) {
-        input.addLookupTable(name, csv);
-      }
-      input.setInstance(message.instances);
-
-      const entries = [];
-      const monitor = new Module.Monitor();
-      monitor.addObserver((entryJson) => entries.push(JSON.parse(entryJson)));
-
-      // the composition is what makes the run interactive: no clock is among its dispatchers, so the engine
-      // stops wherever it can fetch no event, and time advances only by what the page queues
-      const controller = new Module.Controller(JSON.stringify({ dispatchers: INTERACTIVE }));
-      const seed = Number.isFinite(message.seed) ? message.seed : Math.floor(Math.random() * 0x7fffffff);
-      const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), controller, monitor);
-      input.delete();
-
-      session = { engine, monitor, controller, entries };
-      engine.run(0);
+      beginSession(message.instances, message.seed, false);
+      session.engine.run(0);
       report();
+      return;
+    }
+
+    if (message.type === 'initialize') {
+      if (!modelXml) {
+        self.postMessage({ type: 'error', error: 'no model loaded' });
+        return;
+      }
+      // The run is prepared and not carried forward: its opening clock tick is reported and the page then
+      // asks for one advance at a time, so the engine is never further ahead than what the page has drawn.
+      beginSession(message.instances, message.seed, message.greedy);
+      session.engine.initialize(0);
+      report({ seed: session.seed });
+      return;
+    }
+
+    if (message.type === 'setMode') {
+      if (!session) {
+        self.postMessage({ type: 'error', error: 'no run to change the mode of' });
+        return;
+      }
+      // The mode is which dispatchers speak, so it turns over between fetches and the run survives it.
+      // Silencing withholds nothing but dispatching, so what was silent has kept observing and answers
+      // from an up-to-date set at the very next advance.
+      for (const index of GREEDY_ONLY) {
+        if (message.greedy) {
+          session.controller.activate(index);
+        } else {
+          session.controller.deactivate(index);
+        }
+      }
+      report();
+      return;
+    }
+
+    if (message.type === 'advance') {
+      if (!session) {
+        self.postMessage({ type: 'error', error: 'no run to advance' });
+        return;
+      }
+      // one fetch and the event it returned; `advanced` says whether the run may be asked again
+      const advanced = session.engine.advance();
+      report({ advanced });
       return;
     }
 
@@ -222,8 +290,9 @@ self.onmessage = async (event) => {
         return;
       }
 
+      // Queued and no more: what the caller decided is dispatched at the next fetch, and the caller asks
+      // for that fetch itself, so the engine never runs further than what the page has drawn.
       queued();
-      session.engine.resume();
       report();
       return;
     }

@@ -44,8 +44,7 @@ import MessagesModule from './messages/index.js';        // → the "Messages" t
 import SequencesModule from './sequences/index.js';      // → the "Sequences" tab
 import DecisionsModule from './decisions/index.js';      // → the "Decisions" tab
 import TokenRowsModule from './token-rows/index.js';     // token rows a decision panel mounts
-import createGreedy from './greedy/index.js';           // greedy simulation: runs the wasm engine live
-import createManual from './manual/index.js';           // manual simulation: the user advances the run
+import createLiveRun from './live/index.js';            // the run the wasm engine performs, greedy or manual
 import createModeButtons, { modeIcon } from './mode-buttons.js';
 import createRunControls from './run-controls.js';   // the transport and the log, in the panel's footer
 import createClock from './clock.js';               // on-canvas simulation clock (top-right)
@@ -241,17 +240,16 @@ modeler.on('mode.changed', ({ mode }) => {
 // the control that advances it.
 const clock = createClock(modeler);
 
-// The on-canvas mode toggles: manual simulation (a hand, the user advances the run), greedy simulation
-// (microchip, runs the wasm engine to the end) and playback (play).
-const greedy = createGreedy(modeler);
-const manual = createManual(modeler, clock);
+// The run the engine performs, in either mode. Greedy and manual are one run differing in which of the
+// controller's dispatchers answer, so one module owns the session and the mode toggle turns it over.
+const liveRun = createLiveRun(modeler, clock);
 
 // The controls a run is driven by, in the panel's footer: run and pause with the speed beside them, and the
 // three that act on the run as a whole. The mode buttons say which of the log controls may act, a run that
 // produces its own log having nothing to read.
 const runControls = createRunControls(modeler);
 
-createModeButtons(modeler, greedy, manual, runControls);
+createModeButtons(modeler, liveRun, runControls);
 
 // The modeller is reachable from the browser console while developing, so that a panel can be driven with a
 // fixture through the very events a run uses. It is not exposed by a production build.
