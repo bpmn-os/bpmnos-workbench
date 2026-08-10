@@ -104,30 +104,7 @@ html {
   }
 }
 
-/* A column's resizer, which is where a tab's name stands while its column is shut. The side panel makes the
- * strip eleven pixels including its two rules and sets the name in the ten that fit the nine remaining; this
- * host asks for a name that is read as easily as the tabs it names, so the strip is fourteen and the name
- * twelve, the two moving together for the reason the panel states — the name is set to the strip rather than
- * the strip widened to the name. The line is the name's own size, a vertical line box being the thickness of
- * the strip's field. */
-.bjs-panel.bjs-columns > .bjs-panel-body > .bjs-tab-divider {
-  width: 14px;
-}
-
-/* The two grips sit against the name, so the gap between them is the name's box and the margin around it.
- *
- * The box is stated rather than measured, which is the panel's own decision and the right one: a name here
- * says how much its tab holds, and a length measured from the names would move every grip in the panel each
- * time one count changed. What the length has to be is therefore the longest name a run can produce, and a
- * count runs into the thousands, so it is set for "Sequences (1234)" at the size the name is now read in.
- * The margin is what stands between the name and the grips, and is the name's own so that lengthening the
- * box does not close it. */
-.bjs-panel {
-  --bjs-tab-name-length: 120px;
-}
-
-.bjs-tab-divider-name {
-  font-size: 12px;
-  line-height: 12px;
-  margin: 6px 0;
-}
+/* A column's resizer and the name it carries are the side panel's own: the strip of fourteen pixels, the
+ * name set in the twelve that remain, and a name box long enough for the longest a run produces — a count
+ * runs into the thousands, so "Sequences (1234)" is what it must hold. This host stated all three until the
+ * panel took them as its defaults, and states none of them now. */
