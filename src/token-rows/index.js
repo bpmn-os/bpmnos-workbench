@@ -117,13 +117,17 @@ TokenRows.prototype._detail = function(detail, frozen) {
   };
 };
 
-/** The animation's token, where it has drawn one, and otherwise the identity standing in for it. */
-TokenRows.prototype._token = function({ instanceId, nodeId }) {
+/**
+ * The animation's token, where it has drawn one, and otherwise the identity standing in for it. A caller
+ * showing a token the run no longer holds may say what colour it was drawn in, having read it while it was,
+ * and the row wears it as the drawn row would.
+ */
+TokenRows.prototype._token = function({ instanceId, nodeId, color }) {
   return tokenAt(
     this._injector.get('primitives', false),
     this._injector.get('elementRegistry', false),
     instanceId, nodeId
-  ) || { label: instanceId, node: nodeId };
+  ) || { label: instanceId, node: nodeId, color: color || null };
 };
 
 /** A pool shows the process it stands for, as the Tokens tab shows it. */

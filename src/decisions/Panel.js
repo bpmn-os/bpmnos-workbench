@@ -1,3 +1,6 @@
+import { DELETE_ICON } from 'bpmn-js-side-panel';
+
+import createArchiveToggle from '../archive-toggle.js';
 import addFilter from '../panel-filter.js';
 import { selectionFor } from '../token-rows/select.js';
 import createDecisionEntry, { createChoiceRow } from './DecisionEntry.js';
@@ -28,6 +31,7 @@ export default function DecisionsPanel(injector, eventBus, decisions, config) {
   this._inspector = null;
   this._open = new Map(); // which rows a reader has expanded, kept as the list is drawn again
   this._filter = 'all';
+  this._showArchived = true; // whether what the run has answered is listed with what it is still asking
   this._pressed = false;  // a control is under a press, so the list is left alone until it ends
   this._deferred = false; // the store changed while it was, and is to be drawn once it does
 
@@ -49,7 +53,7 @@ DecisionsPanel.prototype._init = function() {
     return;
   }
 
-  const { header, body } = sidePanel.addTab({
+  const { header, body, footer } = sidePanel.addTab({
     id: 'decisions',
     label: this._config.label || 'Decisions',
     // last of the tabs a run concerns: Tokens, then Messages, then Sequences, then this
@@ -60,6 +64,17 @@ DecisionsPanel.prototype._init = function() {
   this._tabName = this._config.label || 'Decisions';
   this._band = header;
   this._body = body;
+
+  // What the tab shows of what the run has finished with, at its foot, as the other tabs of a run show it.
+  footer.appendChild(createArchiveToggle(
+    'the decisions, with the values that were chosen',
+    () => this._showArchived,
+    (on) => {
+      this._showArchived = on;
+      this._render();
+    }
+  ).element);
+
   this._build();
   this._render();
   this._applyNote();
@@ -202,19 +217,15 @@ DecisionsPanel.prototype._restore = function(writing) {
  * show, a selector in one and a column's resizer in the other, so a run can be followed while another column
  * is open. The count is dropped when there is nothing, a name reading "(0)" being noise rather than news.
  */
-DecisionsPanel.prototype._updateTabName = function() {
+DecisionsPanel.prototype._updateTabName = function(shown) {
   if (!this._sidePanel) {
     return;
   }
 
-  const held = this._decisions.all().length;
-
-  this._sidePanel.setTabLabel('decisions', held ? this._tabName + ' (' + held + ')' : this._tabName);
+  this._sidePanel.setTabLabel('decisions', shown ? this._tabName + ' (' + shown + ')' : this._tabName);
 };
 
 DecisionsPanel.prototype._render = function() {
-  this._updateTabName();
-
   if (!this._inspector) {
     return;
   }
@@ -237,11 +248,15 @@ DecisionsPanel.prototype._render = function() {
 
   this._inspector.innerHTML = '';
 
-  const held = this._decisions.all(),
+  // A decision the run has answered is held whether or not it is listed, so what is dropped here is dropped
+  // from the showing alone.
+  const held = this._decisions.all().filter((decision) => this._showArchived || !decision.archived),
         selected = this._selected(),
         shown = this._filter === 'selected'
           ? held.filter((decision) => selected.has(decision.key))
           : held;
+
+  this._updateTabName(shown.length);
 
   if (!shown.length) {
     const hint = document.createElement('div');
@@ -269,9 +284,10 @@ DecisionsPanel.prototype._render = function() {
     }, {
       open: this._open.get(decision.key) === true,
       onToggle: (open) => this._open.set(decision.key, open),
-      control: this._offer(decision),
+      control: decision.archived ? this._forget(decision) : this._offer(decision),
       body: this._body_(decision),
-      onClick: selection && selection.onClick
+      onClick: selection && selection.onClick,
+      archived: !!decision.archived
     });
 
     if (selection) {
@@ -304,12 +320,28 @@ DecisionsPanel.prototype._body_ = function(decision) {
   decision.choices.forEach((choice, index) => {
     choices.appendChild(createChoiceRow(choice, (value) => {
       this._decisions.setValue(decision.key, index, value);
-    }));
+    }, !!decision.archived));
   });
 
   body.appendChild(choices);
 
   return body;
+};
+
+/** The offer to forget one archived decision, which is the only decision a reader may take away. */
+DecisionsPanel.prototype._forget = function(decision) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className = 'bjs-collapsible-entry-control wb-forget';
+  button.title = 'Forget this decision';
+  button.innerHTML = DELETE_ICON;
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    this._decisions.forget(decision.key);
+  });
+
+  return button;
 };
 
 /**

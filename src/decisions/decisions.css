@@ -155,3 +155,15 @@
   line-height: 1.5;
   color: var(--bjs-grey-55, hsl(225, 10%, 55%));
 }
+
+/* A decision the run has answered is a record of what was chosen, not a question: faded exactly as the row
+   of a token being conducted is, summary and disclosure alike. Its controls are read-only rather than
+   removed, so the values can still be read and copied from. */
+.wb-decision-archived > .bjs-collapsible-entry-header,
+.wb-decision-archived > .bjs-collapsible-entry-entries {
+  opacity: 0.55;
+}
+
+.wb-choice-readonly .wb-choice-control {
+  cursor: default;
+}

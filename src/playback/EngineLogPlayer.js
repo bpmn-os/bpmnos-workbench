@@ -376,6 +376,23 @@ EngineLogPlayer.prototype._applyEvent = async function(event) {
       }
     }
   }
+
+  // Which token received which message, which the message's own record does not say: it reports what became
+  // of the message and not who took it. The delivery names both, and the engine announces it before it
+  // processes it, so this reaches the store before the record that archives the message.
+  //
+  // A delivery is announced as a decision where the run decided it and as an event where a caller forced it,
+  // and the two are the same fact under two names, `decision` and `event`. Both carry the colour of the
+  // token that took it, read while it is still drawn, because the record outlives the token.
+  const delivery = event.decision === 'messagedelivery' || event.event === 'messagedelivery';
+
+  if (delivery && !event.expired && this._messages && event.message) {
+    this._messages.deliveredTo(event.message, {
+      instanceId: event.instanceId,
+      nodeId: event.nodeId,
+      color: this._colorOf(event.instanceId)
+    });
+  }
 };
 
 // The flows one token departs a node by, taken from the departure at `index` and every departure
@@ -719,7 +736,9 @@ EngineLogPlayer.prototype._applySequence = function(record) {
 
   if (this._sequences.performsSequentially(node)) {
     if (state === 'BUSY') {
-      this._sequences.open(label, node);
+      // the colour is read here, where the token is drawn: the performer outlives it, and a closed
+      // performer is known by the colour of the token that was performing
+      this._sequences.open(label, node, this._colorOf(label));
     } else if (state === 'COMPLETED' || state === 'FAILED' || state === 'WITHDRAWN') {
       this._sequences.close(label, node);
     }

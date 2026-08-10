@@ -50,7 +50,7 @@ test('a message of one sender is told from a message of another at the same node
   assert.deepEqual(store.all().map((message) => message.sender), [ 'Instance1', 'Instance2' ]);
 });
 
-test('a delivered message and a withdrawn one are no longer waiting', () => {
+test('a delivered message and a withdrawn one are no longer waiting, and are kept as a record', () => {
   const store = new MessageStore();
 
   store.apply(created('SendTask', 'Instance1', 'Request'));
@@ -59,7 +59,37 @@ test('a delivered message and a withdrawn one are no longer waiting', () => {
   store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
   store.apply(disposed('SendTask', 'Instance2', 'WITHDRAWN'));
 
-  assert.deepEqual(store.all(), []);
+  assert.deepEqual(store.all().map((message) => [ message.sender, message.archived, message.state ]), [
+    [ 'Instance1', true, 'DELIVERED' ],
+    [ 'Instance2', true, 'WITHDRAWN' ]
+  ], 'each says what became of it rather than leaving');
+});
+
+test('only an archived message may be forgotten, and forgetting is one message at a time', () => {
+  const store = new MessageStore();
+
+  store.apply(created('SendTask', 'Instance1', 'Request'));
+  store.apply(created('SendTask', 'Instance2', 'Request'));
+  store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
+
+  assert.equal(store.forget('SendTask|Instance2'), false, 'one still waiting is the run\'s to deliver');
+  assert.equal(store.forget('SendTask|Instance1'), true);
+
+  store.apply(disposed('SendTask', 'Instance2', 'DELIVERED'));
+  assert.deepEqual(store.all().map((message) => message.sender), [ 'Instance2' ]);
+});
+
+test('the token that took a message is recorded from the delivery, which the message record does not say', () => {
+  const store = new MessageStore();
+
+  store.apply(created('SendTask', 'Instance1', 'Request'));
+  store.deliveredTo({ origin: 'SendTask', header: { sender: 'Instance1' } },
+    { instanceId: 'Instance2', nodeId: 'ReceiveTask', color: '#3c8' });
+  store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
+
+  assert.deepEqual(store.get('SendTask|Instance1').recipientToken,
+    { instanceId: 'Instance2', nodeId: 'ReceiveTask', color: '#3c8' },
+    'with the colour it was drawn in, the row outliving the token');
 });
 
 test('a node that sent a message may send another under the same key', () => {
@@ -120,11 +150,51 @@ test('the player holds a message while it waits, in the colour of the token that
 
   assert.equal(messages.all().length, 1);
   assert.equal(messages.all()[0].color, '#abcdef');
+});
 
-  player.setLog([ { message: disposed('SendTask', 'Instance1', 'DELIVERED') } ]);
-  await player.play();
+/**
+ * A delivery is announced before it is carried out, and it is what says which token took the message: the
+ * message's own record reports what became of it and not who took it. The engine announces the delivery as
+ * a decision where the run decided it and as an event where a caller forced it, so both are read, and the
+ * shape here is `MessageDeliveryDecision::jsonify`'s own.
+ */
+test('the player records who took a message, from the delivery, and archives it with them', async () => {
+  const definitions = await parse(MODEL),
+        eventBus = createEventBus(),
+        elementRegistry = createElementRegistry(definitions),
+        animation = createAnimation(eventBus, elementRegistry),
+        messages = new Messages(eventBus);
 
-  assert.deepEqual(messages.all(), []);
+  const primitives = createPrimitives([
+    { node: 'SendTask', label: 'Instance1', color: '#abcdef' },
+    { node: 'ReceiveTask', label: 'Instance2', color: '#fedcba' }
+  ]);
+
+  const player = new EngineLogPlayer(eventBus, animation, primitives, elementRegistry, {
+    get: (name) => name === 'messages' ? messages : undefined
+  });
+
+  const message = created('SendTask', 'Instance1', 'Request', { machine: 'M1' });
+
+  for (const delivery of [
+    { decision: 'messagedelivery', instanceId: 'Instance2', nodeId: 'ReceiveTask', message, reward: 0 },
+    { event: 'messagedelivery', instanceId: 'Instance2', nodeId: 'ReceiveTask', message }
+  ]) {
+    player.setLog([
+      { message },
+      { event: delivery },
+      { message: disposed('SendTask', 'Instance1', 'DELIVERED') }
+    ]);
+    await player.play();
+
+    const [ held ] = messages.all();
+
+    assert.equal(held.archived, true, 'it stays as a record of what became of it');
+    assert.equal(held.state, 'DELIVERED');
+    assert.deepEqual(held.recipientToken,
+      { instanceId: 'Instance2', nodeId: 'ReceiveTask', color: '#fedcba' },
+      'named by the delivery, in the colour that token was drawn in');
+  }
 });
 
 /**
@@ -142,12 +212,13 @@ async function panel(messages) {
   const eventBus = createEventBus(),
         header = document.createElement('div'),
         body = document.createElement('div'),
+        footer = document.createElement('div'),
         labels = [];   // what the tab has been named, the last of them being how much it holds
 
   const injector = {
     get: (name) => name === 'sidePanel'
       ? {
-        addTab: () => ({ header, body, footer: document.createElement('div') }),
+        addTab: () => ({ header, body, footer }),
         setTabLabel(id, label) { labels.push(label); },
         setNote() {}
       }
@@ -158,7 +229,7 @@ async function panel(messages) {
 
   eventBus.fire('diagram.init');
 
-  return { header, body, labels, eventBus, shown };
+  return { header, body, footer, labels, eventBus, shown };
 }
 
 test('a tab with nothing to show says so, in the words the Tokens tab uses', async () => {
@@ -241,4 +312,38 @@ test('the tab is drawn again when the store announces a change', async () => {
   panelBus.fire('messages.changed');
 
   assert.equal(body.querySelectorAll('.bjs-token-entry').length, 1);
+});
+
+/**
+ * The archive is a question of showing and not of keeping. A message the run has finished with is held by
+ * the store whatever the tab is showing, so turning the control off takes it out of the list and turning it
+ * on again brings the same record back; what is forgotten is forgotten by the trash the row carries.
+ */
+test('"Show archive" governs what the tab lists, and not what the store holds', async () => {
+  const store = new MessageStore();
+
+  store.apply(created('SendTask', 'Instance1', 'Request'));
+  store.apply(created('SendTask', 'Instance2', 'Request'));
+  store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
+
+  const { body, footer, labels } = await panel(store);
+
+  assert.equal(body.querySelectorAll('.bjs-token-entry').length, 2);
+  assert.equal(labels[labels.length - 1], 'Messages (2)');
+
+  const box = footer.querySelector('.wb-archive-toggle input');
+
+  assert.equal(box.checked, true, 'the whole record is shown until the reader asks otherwise');
+
+  box.checked = false;
+  box.dispatchEvent(new box.ownerDocument.defaultView.Event('change'));
+
+  assert.equal(body.querySelectorAll('.bjs-token-entry').length, 1, 'the delivered one is not listed');
+  assert.equal(labels[labels.length - 1], 'Messages (1)', 'and the name says how much is shown');
+  assert.equal(store.all().length, 2, 'while the store holds it still');
+
+  box.checked = true;
+  box.dispatchEvent(new box.ownerDocument.defaultView.Event('change'));
+
+  assert.equal(body.querySelectorAll('.bjs-token-entry').length, 2, 'so turning it on brings it back');
 });

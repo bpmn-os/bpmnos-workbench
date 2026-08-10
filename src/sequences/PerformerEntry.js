@@ -37,6 +37,15 @@ export default function createPerformerEntry(performer, options = {}) {
 
   entry.element.classList.add('bjs-token-entry');
 
+  // A performer that has closed is a record of what it did rather than a list the run is working through:
+  // it is greyed, as an archived token is, and offers the one control such a record carries, forgetting it.
+  if (options.closed) {
+    entry.element.classList.add('wb-performer-closed');
+  }
+  if (options.onForget) {
+    entry.controlsEl.appendChild(options.onForget);
+  }
+
   if (options.body) {
     entry.contentEl.appendChild(options.body);
   }

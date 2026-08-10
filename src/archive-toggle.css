@@ -1,0 +1,32 @@
+/* The "Show archive" control of a tab's footer, in Messages, Sequences and Decisions.
+
+   It stands where the token panel keeps the controls a run is driven by, and says the same thing in all
+   three tabs, so it is drawn once here rather than three times beside the lists it governs. The switch
+   itself is the token panel's own, `bjs-token-toggle`, which is what this application offers a setting
+   with; only the row it stands in is declared here.
+
+   The switch is declared inside `.bjs-token`, where that package states its palette, and a tab's footer is
+   outside it, so the two colours it takes are given here from the side panel's own tokens. Without them it
+   would fall back to whatever the browser last had, which is the one thing in the panel that agrees with
+   nothing in it.
+
+   The footer already insets its content by ten, so the row adds none: a control that inset itself again
+   would stand further in than the tab's name above it and than the controls a run is driven by. */
+.wb-archive-toggle {
+  --t-accent: var(--bjs-accent, hsl(205, 100%, 45%));
+  --t-grey-75: var(--bjs-grey-75, hsl(225, 10%, 75%));
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
+}
+
+/* Showing the whole record is the ordinary state, so the word brightens where the reader has turned the
+   archive off, which is the state worth noticing: a tab that is holding more than it lists. */
+.wb-archive-toggle:has(input:not(:checked)) {
+  color: var(--bjs-grey-30, hsl(225, 10%, 30%));
+}

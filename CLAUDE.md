@@ -110,6 +110,12 @@ Key source (this repo):
   and the values stated on both sides agree. Both sides therefore come from records, so the relation holds
   what the diagram holds. The heading's filter selects on that same relation, so "selected tokens" narrows
   both which messages are listed and which of a message's tokens are shown under it.
+
+  A message the run has finished with says what became of it and, where it was delivered, who took it. That
+  token is named by the delivery record, which the engine announces before it carries the delivery out and
+  which reports it as a decision where the run decided it and as an event where a caller forced it. It is
+  held with the colour it was drawn in, since the record outlives the token, and the row that shows it is
+  frozen for the same reason.
 - `src/sequences/` — the sequential performers of a run and the order each works through: `Store.js` (plain,
   node-testable, holding what the model resolved and, per performer, the reader's order as one list of keys
   with the divider among them and the token being conducted), `index.js` (the `sequences` service,
@@ -137,12 +143,23 @@ Key source (this repo):
   An archived row is frozen: it carries the values the token held as it left, since the execution state
   forgets a token that is gone, and it offers the one control a row of this panel carries, forgetting it. A
   waiting row offers none, the engine queueing a token once and never again, so a row thrown away would be a
-  token that could never be performed. "Keep archived tokens" stands at the head of each performer's list,
-  fixed there and taking no part in the order, and governs the keeping rather than the showing: turning it
-  off forgets what that performer holds, and turning it on begins its record afresh. It is a performer's own,
-  a record of what one performer did being no business of another's, and what the reader asks for last is
-  what a performer opened later is born with, a run opening performers as it goes. The heading's filter lists a performer for its own token, a token of its list, and a
-  token standing at an ad hoc sub-process it performs for, and for nothing else in the same process.
+  token that could never be performed. A performer that closes is kept on the same terms, with the order it
+  worked in and the offer to forget it. It keeps the colour of the token that was performing, which the store
+  captured when it opened, that colour being what says whose record it is; the tokens it performed for keep
+  none, a row that has left being grey precisely to say that it has. The heading's filter lists a performer
+  for its own token, a token of its list, and a token standing at an ad hoc sub-process it performs for, and
+  for nothing else in the same process.
+- The archive of a run: what Messages, Sequences and Decisions each hold of what the run has finished with —
+  a message delivered or withdrawn, a performer that has closed and the tokens that have left one, a decision
+  that has been answered. Each such thing is kept by its store as a record, faded and offering the one
+  control a record carries, forgetting it, and each is a record precisely because the run does not hold it
+  any more: what it discloses was frozen as it went.
+
+  "Show archive" stands in each tab's footer, drawn once in `src/archive-toggle.js`, and governs the showing
+  and not the keeping. A reader asking to see what a run is still doing is not asking to destroy the record
+  of what it did, and turning it on again brings the whole of it back. What is forgotten is forgotten one
+  entry at a time, so that every act of forgetting is one the reader aimed at something. The tab's own name
+  counts what is shown rather than what is held, being what a reader is looking at.
 - `src/decisions/` — the decision tasks a run waits at and the choices each waits for: `Store.js` (plain,
   node-testable, holding per decision what the engine has answered and what the reader has entered),
   `declarations.js` (the choices a task states, read from `bpmnos:decisions` in the model),
@@ -216,6 +233,12 @@ Key source (this repo):
   alike. Anything written twice is two things, and the copy on this page would go on agreeing with a panel
   the original had stopped agreeing with, which is the failure this page exists to prevent. It is where a
   panel is designed and reviewed before it is wired to a run.
+
+  What it stands in for is a run in progress, so the tokens it holds are the tokens a run would hold and no
+  more: the token that was performed and archived, the performer that closed and the token that took the
+  message that was delivered are all absent from it, as they are absent from an animation once they have
+  gone. A page that kept them alive would draw every record from a token that a run would not have, and
+  would show nothing of what such a record gets wrong.
 - `src/token-rows/` — the `tokenRows` service: a token drawn as the Tokens tab draws it, wherever a panel
   asks something of the reader about it. The row is `createTokenEntry` given what the token panel gives its
   own rows, so a token reads the same everywhere; a panel adds a control the row carries and, later, a
@@ -241,7 +264,10 @@ Key source (this repo):
   name, the file it was read from: the source the model declares for a lookup, the name of a file the reader
   has loaded, which the table entry reports through `onLoad`, or "No file selected". The set of lookups is a
   property of the model, so the columns of the old model are taken away and the new ones added whenever a
-  model is read, and all of them go when the run that mounted them ends.
+  model is read, and all of them go when the run that mounted them ends. Reading a file into a table is not
+  such a change: it alters what that table was read from and nothing else, so the columns stay as they are
+  and only the line beneath each name is written again. Taking them away and putting them back would close
+  the column the reader had opened and lose its width and where it was scrolled to.
 - `src/greedy/` — the greedy source: the seed, the cached log, and the log source the transport pulls on
   play. It mounts the input provider and runs through `src/engine/`, and owns neither.
 - `src/execution-state/` — the values a run produces: `Store.js` (plain, registry-taking, node-testable),

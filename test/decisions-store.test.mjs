@@ -36,12 +36,29 @@ describe('the decision store', () => {
     assert.equal(store.get(KEY).nodeId, 'DecisionTask_1');
   });
 
-  it('closes a decision by the token it was opened for', () => {
+  it('closes a decision by the token it was opened for, keeping it as a record', () => {
     const store = opened();
 
     assert.equal(store.close('Instance_1', 'Other'), false);
     assert.equal(store.close('Instance_1', 'DecisionTask_1'), true);
-    assert.equal(store.all().length, 0);
+    assert.equal(store.all().length, 1, 'it stays, with what was chosen');
+    assert.equal(store.isArchived('Instance_1|DecisionTask_1'), true);
+    assert.equal(store.submittable('Instance_1|DecisionTask_1'), false, 'and is answered no further');
+
+    assert.equal(store.forget('Instance_1|DecisionTask_1'), true, 'the reader may take it away');
+    assert.deepEqual(store.all(), []);
+  });
+
+  it('forgets an archived decision and only an archived one', () => {
+    const kept = opened();
+
+    kept.close('Instance_1', 'DecisionTask_1');
+    assert.equal(kept.forget('Instance_1|DecisionTask_1'), true);
+
+    const open_ = opened();
+
+    assert.equal(open_.forget('Instance_1|DecisionTask_1'), false, 'one still open is the run\'s to answer');
+    assert.equal(open_.all().length, 1);
   });
 
   it('holds what it was answered, and the value entered against it', () => {

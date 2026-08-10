@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/src/messages/messages.css">
   <link rel="stylesheet" href="/src/sequences/sequences.css">
   <link rel="stylesheet" href="/src/decisions/decisions.css">
+  <link rel="stylesheet" href="/src/archive-toggle.css">
   <style>
     body {
       margin: 0;
@@ -35,6 +36,18 @@
       font-weight: 600;
       background: var(--bjs-grey-97);
       border-bottom: 1px solid var(--bjs-grey-75);
+    }
+    /* the foot of a tab, where the side panel puts the control that governs what the tab lists, as the
+       application states it in `src/app.less`: one row high, the row centred, and the field of the list
+       above rather than a band of its own */
+    .bjs-tab-footer {
+      box-sizing: border-box;
+      height: 32px;
+      padding: 0 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-top: 1px solid var(--bjs-grey-75);
     }
     .side { flex: 1 1 auto; min-width: 0; }
     .side h2 { font-size: 13px; margin: 0 0 8px; color: hsl(225, 10%, 35%); }
@@ -109,7 +122,8 @@
     ];
 
     // a performer, three tokens queued under it; a second performer conducting one of its own; a third
-    // standing at a process with nothing under it yet
+    // standing at a process with nothing under it yet; and a fourth that has finished and closed, which is
+    // the record the archive is about
     const RUN = [
       [ 'open', 'Instance_1', 'AdHocSubProcess_1' ],
       [ 'queue', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_1' ],
@@ -121,15 +135,35 @@
       [ 'conduct', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_1' ],
       [ 'archive', 'Instance_1|AdHocSubProcess_1', 'Instance_1', 'Activity_1' ],
       [ 'conduct', 'Instance_2|SubProcess_1', 'Instance_2', 'Activity_1' ],
-      [ 'open', 'Instance_3', 'Process_1' ]
+      [ 'open', 'Instance_3', 'Process_1' ],
+      [ 'open', 'Instance_4', 'SubProcess_1' ],
+      [ 'queue', 'Instance_4|SubProcess_1', 'Instance_4', 'Activity_1' ],
+      [ 'conduct', 'Instance_4|SubProcess_1', 'Instance_4', 'Activity_1' ],
+      [ 'archive', 'Instance_4|SubProcess_1', 'Instance_4', 'Activity_1' ],
+      [ 'close', 'Instance_4', 'SubProcess_1' ]
     ];
 
-    // one message waiting, and the token that has begun waiting for one, as the request record states it
+    // one message waiting, one delivered and one withdrawn: what a run has finished with is what the
+    // archive holds, and a delivered message names the token that took it
     const MESSAGE = {
       origin: 'RequestTask',
       state: 'CREATED',
       header: { name: 'Request', sender: 'Instance_1', recipient: null, machine: 'M1' },
       content: { Duration: 7, Job: 'B' }
+    };
+
+    const DELIVERED = {
+      origin: 'RequestTask',
+      state: 'CREATED',
+      header: { name: 'Request', sender: 'Instance_4', recipient: null, machine: 'M2' },
+      content: { Duration: 3, Job: 'A' }
+    };
+
+    const WITHDRAWN = {
+      origin: 'OfferTask',
+      state: 'CREATED',
+      header: { name: 'Offer', sender: 'Instance_4', recipient: null, machine: 'M2' },
+      content: { Price: 12 }
     };
 
     const DELIVERY_REQUEST = {
@@ -158,10 +192,17 @@
     };
 
     // the tokens the animation would have drawn, which is where a row takes its colour and its state from
-    const COLORS = { Instance_1: '#1a73e8', Instance_2: '#e8710a', Instance_3: '#188038' };
+    const COLORS = {
+      Instance_1: '#1a73e8', Instance_2: '#e8710a', Instance_3: '#188038',
+      Instance_4: '#9334e6', Instance_5: '#c5221f'
+    };
 
+    // The tokens the animation holds, which is what a run holds and no more. What the run has finished with
+    // is absent: the token that was performed and archived, the performer that closed, and the token that
+    // took the message that was delivered. A record of one of those is drawn from what the store captured
+    // as it happened, and a page that kept the tokens alive would show none of that going wrong.
     const TOKENS = [
-      [ 'Instance_1', 'AdHocSubProcess_1' ], [ 'Instance_1', 'Activity_1' ],
+      [ 'Instance_1', 'AdHocSubProcess_1' ],
       [ 'Instance_1', 'Activity_2' ], [ 'Instance_1', 'Activity_3' ],
       [ 'Instance_2', 'SubProcess_1' ], [ 'Instance_2', 'Activity_1' ], [ 'Instance_2', 'Activity_2' ],
       [ 'Instance_3', 'Process_1' ],
@@ -257,14 +298,19 @@
     const sidePanel = {
       // the panel hands back a tab's three slots; this page mounts the body where it wants it and gives the
       // band a place of its own above it, as the side panel does
+      // A tab is a band, a body and a foot, as the side panel gives it. The foot is what carries the
+      // controls a tab offers over the whole of its list, so a page without one would not show the tab.
       addTab: ({ id }) => {
         const body = document.getElementById(PANES[id] || 'pane'),
-              header = document.createElement('div');
+              header = document.createElement('div'),
+              footer = document.createElement('div');
 
         header.className = 'bjs-tab-header';
+        footer.className = 'bjs-tab-footer';
         body.parentNode.insertBefore(header, body);
+        body.parentNode.insertBefore(footer, body.nextSibling);
 
-        return { header, body };
+        return { header, body, footer };
       },
 
       // The panel names a tab and its resizer; this page shows neither, so it takes the name and does
@@ -313,7 +359,10 @@
 
     RUN.forEach(([ what, ...args ]) => {
       if (what === 'open') {
-        sequences.open(args[0], args[1]);
+        // the colour is given as the player gives it, read from the token standing there while it is drawn
+        sequences.open(args[0], args[1], COLORS[args[0]]);
+      } else if (what === 'close') {
+        sequences.close(args[0], args[1]);
       } else {
         sequences[what](args[0], { label: args[1], node: args[2] });
       }
@@ -321,6 +370,16 @@
 
     messages.apply(MESSAGE, COLORS.Instance_1);
     messages.awaiting(DELIVERY_REQUEST);
+
+    // and what the run has finished with, written as the player writes it: the delivery names the token
+    // that took it, and the record that follows archives the message
+    messages.apply(DELIVERED, COLORS.Instance_4);
+    messages.deliveredTo(DELIVERED,
+      { instanceId: 'Instance_5', nodeId: 'Activity_2', color: COLORS.Instance_5 });
+    messages.apply({ ...DELIVERED, state: 'DELIVERED' });
+
+    messages.apply(WITHDRAWN, COLORS.Instance_4);
+    messages.apply({ ...WITHDRAWN, state: 'WITHDRAWN' });
 
     // Two decision tasks waiting, standing in for what a run would ask. The first shows the whole of what
     // the tab is about: a second choice whose bounds and step follow from the first, so that choosing a

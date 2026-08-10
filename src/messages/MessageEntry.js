@@ -21,6 +21,8 @@ import { createCollapsibleEntry } from 'bpmn-js-side-panel';
  * @param {boolean} [options.open=false]  whether the row starts expanded
  * @param {Function} [options.onToggle]   (open) => void
  * @param {Element[]} [options.recipients]  rows of the tokens that may receive it, ready to be shown
+ * @param {boolean} [options.archived]    the run has finished with it: a record rather than an offer
+ * @param {Element} [options.onForget]    the control that takes an archived message away
  */
 export default function createMessageEntry(message, options = {}) {
   const summary = el('span', 'bjs-token-summary');
@@ -43,14 +45,32 @@ export default function createMessageEntry(message, options = {}) {
 
   entry.element.classList.add('bjs-token-entry');
 
+  // A message the run has finished with is a record of what became of it: faded as a token being conducted
+  // is, offering no delivery, and carrying the one control such a record has, forgetting it.
+  if (options.archived) {
+    entry.element.classList.add('wb-message-archived');
+  }
+  if (options.onForget) {
+    entry.controlsEl.appendChild(options.onForget);
+  }
+
   entry.contentEl.appendChild(line('Origin', message.origin));
 
   section(entry.contentEl, 'Header', omit(message.header, SHOWN_IN_SUMMARY));
   section(entry.contentEl, 'Content', message.content);
 
-  recipients(entry.contentEl, options.recipients || []);
+  recipients(entry.contentEl, options.recipients || [], options.archived ? archivedTitle(message) : undefined);
 
   return entry;
+}
+
+/**
+ * What became of a message the run has finished with, which is what stands where the offer stood. A message
+ * that was delivered says who took it, above the row of that token; one that was withdrawn says so and has
+ * no such token, having gone undelivered.
+ */
+function archivedTitle(message) {
+  return message.state === 'WITHDRAWN' ? 'Withdrawn' : 'Delivered to';
 }
 
 /**
@@ -58,10 +78,11 @@ export default function createMessageEntry(message, options = {}) {
  * else: which tokens these are is what the row is there to decide, so there is nothing to fold away and no
  * caret to leave room for. The title says whether there are any, in the words the panel says it in.
  */
-function recipients(parent, rows) {
+function recipients(parent, rows, title) {
   const section = el('div', 'wb-message-tokens');
 
-  section.appendChild(text('div', 'bjs-token-list-title', rows.length ? 'Tokens' : 'No tokens'));
+  section.appendChild(text('div', 'bjs-token-list-title',
+    title || (rows.length ? 'Tokens' : 'No tokens')));
   rows.forEach((row) => section.appendChild(row));
 
   parent.appendChild(section);

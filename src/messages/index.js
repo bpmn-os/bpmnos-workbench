@@ -110,6 +110,16 @@ export class Messages extends MessageStore {
     return key;
   }
 
+  forget(key) {
+    const forgotten = super.forget(key);
+
+    if (forgotten) {
+      this._eventBus.fire('messages.changed', {});
+    }
+
+    return forgotten;
+  }
+
   clear() {
     const held = super.clear();
 

@@ -58,6 +58,20 @@ export default class DecisionStore {
   }
 
   /**
+   * Forget one archived decision, which the reader may ask for one at a time. Only an archived decision may
+   * be forgotten: one still open is what the run is waiting on.
+   */
+  forget(key) {
+    const held = this._decisions.get(key);
+
+    if (!held || !held.archived) {
+      return false;
+    }
+
+    return this._decisions.delete(key);
+  }
+
+  /**
    * A decision task is waiting. Opening it twice is not an error and changes nothing, a request being
    * announced once and the store outliving whatever redraws it.
    */
@@ -81,14 +95,33 @@ export default class DecisionStore {
   }
 
   /**
-   * The decision is gone: the run answered it, or the token carrying it did not survive.
+   * The decision is settled: the run answered it, or the token carrying it did not survive. It stays, with
+   * the values that were chosen, as a record of what was decided rather than a question the reader may
+   * answer. Whether such a record is listed is a tab's question and not the store's.
    *
    * It is named by its token rather than by its key, as opening it is, because the player speaks the
    * identities a record carries and holds no key of its own. What the reader does afterwards is keyed,
    * since a panel draws from the store and the key is what it drew.
    */
   close(instanceId, nodeId) {
-    return this._decisions.delete(keyOf(instanceId, nodeId));
+    const key = keyOf(instanceId, nodeId),
+          held = this._decisions.get(key);
+
+    if (!held) {
+      return false;
+    }
+
+    held.archived = true;
+    held.awaited = false;
+
+    return true;
+  }
+
+  /** Whether a decision has been settled, and is therefore a record rather than a question. */
+  isArchived(key) {
+    const held = this._decisions.get(key);
+
+    return !!held && !!held.archived;
   }
 
   /**
@@ -210,7 +243,7 @@ export default class DecisionStore {
   submittable(key) {
     const held = this._decisions.get(key);
 
-    return !!held && held.complete && !held.awaited &&
+    return !!held && !held.archived && held.complete && !held.awaited &&
       held.choices.length > 0 && this.values(key).length === held.choices.length;
   }
 

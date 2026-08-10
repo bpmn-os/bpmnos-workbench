@@ -1,3 +1,5 @@
+import { DELETE_ICON } from 'bpmn-js-side-panel';
+import createArchiveToggle from '../archive-toggle.js';
 import addFilter from '../panel-filter.js';
 import createMessageEntry from './MessageEntry.js';
 
@@ -29,6 +31,7 @@ export default function MessagesPanel(injector, eventBus, messages, config) {
   this._open = new Map();   // which rows a reader has expanded, kept as the list is drawn again
   this._awaited = new Set(); // deliveries asked for and not yet reported, so the offer reads as waiting
   this._filter = 'all';      // which messages are listed: all of them, or those for the selected tokens
+  this._showArchived = true; // whether what the run has finished with is listed with what it is still doing
 
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('messages.changed', () => this._render());
@@ -52,17 +55,51 @@ export default function MessagesPanel(injector, eventBus, messages, config) {
  * that draws them for every panel, each carrying the offer to deliver this message to that token.
  */
 MessagesPanel.prototype._candidates = function(message) {
-  const tokenRows = this._injector.get('tokenRows', false),
-        recipients = this._shown(this._messages.recipients ? this._messages.recipients(message.key) : []);
+  const tokenRows = this._injector.get('tokenRows', false);
 
   if (!tokenRows) {
     return [];
   }
 
+  // A message the run has finished with offers nothing: what it shows is the token that took it, faded as
+  // the row of a token being conducted is, since it is a record of what happened rather than a choice.
+  //
+  // It is a row of its own rather than the candidate row that stood there while the message waited: that
+  // row carries the offer to deliver, which is no longer a thing to offer. It is frozen, the token having
+  // moved on long before a reader reads the record, and it is drawn in the colour that token was drawn in,
+  // which the store captured for exactly that reason.
+  if (message.archived) {
+    if (!message.recipientToken || !this._shown([ message.recipientToken ]).length) {
+      return [];
+    }
+
+    // it needs no fading of its own, standing within a row that is already faded whole
+    return [ tokenRows.create(asked(message.key, message.recipientToken) + '|archived',
+      message.recipientToken, { frozen: true }).element ];
+  }
+
+  const recipients = this._shown(this._messages.recipients ? this._messages.recipients(message.key) : []);
+
   return recipients.map((recipient) =>
     tokenRows.create(asked(message.key, recipient), recipient, {
       control: this._offer(message, recipient)
     }).element);
+};
+
+/** The offer to forget one archived message, which is the only message a reader may take away. */
+MessagesPanel.prototype._forget = function(message) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className = 'bjs-collapsible-entry-control wb-forget';
+  button.title = 'Forget this message';
+  button.innerHTML = DELETE_ICON;
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    this._messages.forget(message.key);
+  });
+
+  return button;
 };
 
 /**
@@ -107,9 +144,15 @@ MessagesPanel.prototype._shown = function(recipients) {
   return recipients.filter((recipient) => selected.has(`${recipient.instanceId}|${recipient.nodeId}`));
 };
 
-/** Whether any token that may receive this message is one the reader has selected. */
+/**
+ * Whether any token that may receive this message is one the reader has selected. A message the run has
+ * finished with has no such token and one token instead, the one that took it, which is the same relation
+ * once the question has been answered.
+ */
 MessagesPanel.prototype._forSelected = function(message) {
-  const recipients = this._messages.recipients ? this._messages.recipients(message.key) : [];
+  const recipients = message.archived
+    ? (message.recipientToken ? [ message.recipientToken ] : [])
+    : (this._messages.recipients ? this._messages.recipients(message.key) : []);
 
   return this._shown(recipients).length > 0;
 };
@@ -154,7 +197,7 @@ MessagesPanel.prototype._init = function() {
     return; // no side panel, or the tab is up already
   }
 
-  const { header, body } = sidePanel.addTab({
+  const { header, body, footer } = sidePanel.addTab({
     id: 'messages',
     label: this._config.label || 'Messages',
     priority: this._config.priority != null ? this._config.priority : -1
@@ -164,6 +207,17 @@ MessagesPanel.prototype._init = function() {
   this._tabName = this._config.label || 'Messages';
   this._band = header;
   this._body = body;
+
+  // What the tab shows of what the run has finished with, at its foot, as the other tabs of a run show it.
+  footer.appendChild(createArchiveToggle(
+    'the messages',
+    () => this._showArchived,
+    (on) => {
+      this._showArchived = on;
+      this._render();
+    }
+  ).element);
+
   this._build();
   this._render();
   this._applyNote();
@@ -225,29 +279,29 @@ MessagesPanel.prototype._build = function() {
  * show, a selector in one and a column's resizer in the other, so a run can be followed while another column
  * is open. The count is dropped when there is nothing, a name reading "(0)" being noise rather than news.
  */
-MessagesPanel.prototype._updateTabName = function() {
+MessagesPanel.prototype._updateTabName = function(shown) {
   if (!this._sidePanel) {
     return;
   }
 
-  const held = this._messages.all().length;
-
-  this._sidePanel.setTabLabel('messages', held ? this._tabName + ' (' + held + ')' : this._tabName);
+  this._sidePanel.setTabLabel('messages', shown ? this._tabName + ' (' + shown + ')' : this._tabName);
 };
 
 MessagesPanel.prototype._render = function() {
-  this._updateTabName();
-
   if (!this._inspector) {
     return;
   }
 
   this._inspector.innerHTML = '';
 
-  const held = this._messages.all(),
+  // A message the run has finished with is held whether or not it is listed, so what is dropped here is
+  // dropped from the showing alone; the count says how much is shown, which is what the reader is looking at.
+  const held = this._messages.all().filter((message) => this._showArchived || !message.archived),
         messages = this._filter === 'selected'
           ? held.filter((message) => this._forSelected(message))
           : held;
+
+  this._updateTabName(messages.length);
 
   if (!messages.length) {
     const hint = document.createElement('div');
@@ -264,6 +318,8 @@ MessagesPanel.prototype._render = function() {
     const entry = createMessageEntry(message, {
       open: this._open.get(message.key) === true,
       onToggle: (open) => this._open.set(message.key, open),
+      archived: !!message.archived,
+      onForget: message.archived ? this._forget(message) : null,
       // a store that holds no relation offers no delivery: the relation is a running engine's answer, and
       // the panel draws over a store that may be nothing more than what was sent
       recipients: this._candidates(message)

@@ -19,6 +19,24 @@ html {
   --bjs-panel-slot-height: 52px;
 }
 
+/* A tab's footer here holds one control, "Show archive", and nothing else. The side panel gives a footer the
+ * band its header wears, which is right for a header — a tab's name over the control that governs what the
+ * tab lists, in a grey field, its content at the top so the name stands at one height in every tab — and is
+ * more band than one control needs. So this host says what its own footers are: the height of the row they
+ * hold, that row centred in it, and the ground of the list above rather than a field of its own, the rule
+ * between them being enough to say where the list ends.
+ *
+ * The ground is taken rather than named. A tab's body declares no background and shows whatever the panel
+ * puts behind it, so a footer that named a colour would be naming the panel's, and would go on naming it
+ * after the panel had changed its mind. */
+.bjs-tab-footer {
+  height: 32px;
+  /* the band's ten above and below is for two lines; one row of 32 is the band, so only the inset remains */
+  padding: 0 10px;
+  justify-content: center;
+  background-color: transparent;
+}
+
 /* app identity injected into the side-panel header slot: wordmark left, GitHub link right */
 .wb-brand {
   flex: 1 1 auto;
@@ -84,4 +102,32 @@ html {
   &::before {
     margin: 0;
   }
+}
+
+/* A column's resizer, which is where a tab's name stands while its column is shut. The side panel makes the
+ * strip eleven pixels including its two rules and sets the name in the ten that fit the nine remaining; this
+ * host asks for a name that is read as easily as the tabs it names, so the strip is fourteen and the name
+ * twelve, the two moving together for the reason the panel states — the name is set to the strip rather than
+ * the strip widened to the name. The line is the name's own size, a vertical line box being the thickness of
+ * the strip's field. */
+.bjs-panel.bjs-columns > .bjs-panel-body > .bjs-tab-divider {
+  width: 14px;
+}
+
+/* The two grips sit against the name, so the gap between them is the name's box and the margin around it.
+ *
+ * The box is stated rather than measured, which is the panel's own decision and the right one: a name here
+ * says how much its tab holds, and a length measured from the names would move every grip in the panel each
+ * time one count changed. What the length has to be is therefore the longest name a run can produce, and a
+ * count runs into the thousands, so it is set for "Sequences (1234)" at the size the name is now read in.
+ * The margin is what stands between the name and the grips, and is the name's own so that lengthening the
+ * box does not close it. */
+.bjs-panel {
+  --bjs-tab-name-length: 120px;
+}
+
+.bjs-tab-divider-name {
+  font-size: 12px;
+  line-height: 12px;
+  margin: 6px 0;
 }

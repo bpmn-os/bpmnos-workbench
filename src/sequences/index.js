@@ -47,8 +47,8 @@ export class Sequences extends SequenceStore {
     });
   }
 
-  open(label, node) {
-    return this._announce(super.open(label, node));
+  open(label, node, color) {
+    return this._announce(super.open(label, node, color));
   }
 
   close(label, node) {
@@ -71,8 +71,8 @@ export class Sequences extends SequenceStore {
     return this._announce(super.forget(key, tokenKey));
   }
 
-  keepArchived(key, keep) {
-    return this._announce(super.keepArchived(key, keep));
+  forgetPerformer(key) {
+    return this._announce(super.forgetPerformer(key));
   }
 
   clear() {
@@ -127,6 +127,9 @@ export class Sequences extends SequenceStore {
     }
 
     this.all().forEach((held) => {
+      if (held.closed) {
+        return; // a record of what was done, not a list the run is still working through
+      }
       if (held.conducting) {
         return; // busy: what it takes next is decided when it is seen to be released
       }

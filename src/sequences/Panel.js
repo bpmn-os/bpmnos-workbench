@@ -3,6 +3,7 @@ import {
 } from 'bpmn-js-side-panel';
 
 import { processOf, tokenAt } from '../animation-tokens.js';
+import createArchiveToggle from '../archive-toggle.js';
 import addFilter from '../panel-filter.js';
 import { selectionFor } from '../token-rows/select.js';
 import { DIVIDER } from './Store.js';
@@ -10,10 +11,6 @@ import createPerformerEntry from './PerformerEntry.js';
 
 /** What the divider says it does, which is the whole of what the order means. */
 const DIVIDER_LABEL = 'Tokens above enter activity automatically';
-
-// The key the keeping stands under in a performer's list. It is no token, so it is named rather than keyed
-// by one, and the ordered list holds it fixed at the head where it takes no part in the order.
-const KEEP = '\u0000keep';
 
 /**
  * The Sequences tab: the sequential performers of a run, and the order each is to work through.
@@ -41,6 +38,7 @@ export default function SequencesPanel(injector, eventBus, sequences, config) {
   this._inspector = null;
   this._open = new Map(); // which performers a reader has expanded, kept as the list is drawn again
   this._filter = 'all';   // which performers are listed: all of them, or those a selected token concerns
+  this._showArchived = true; // whether what the run has finished with is listed with what it is still doing
 
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('sequences.changed', () => this._render());
@@ -60,7 +58,7 @@ SequencesPanel.prototype._init = function() {
     return; // no side panel, or the tab is up already
   }
 
-  const { header, body } = sidePanel.addTab({
+  const { header, body, footer } = sidePanel.addTab({
     id: 'sequences',
     label: this._config.label || 'Sequences',
     priority: this._config.priority != null ? this._config.priority : -2
@@ -70,6 +68,19 @@ SequencesPanel.prototype._init = function() {
   this._tabName = this._config.label || 'Sequences';
   this._band = header;
   this._body = body;
+
+  // What the tab shows of what the run has finished with, at its foot, where the token panel keeps the
+  // controls a run is driven by. It governs the whole list rather than one performer, a reader asking the
+  // question of the record and not of each holder of it.
+  footer.appendChild(createArchiveToggle(
+    'the performers that have closed, and the tokens that have left one',
+    () => this._showArchived,
+    (on) => {
+      this._showArchived = on;
+      this._render();
+    }
+  ).element);
+
   this._build();
   this._render();
   this._applyNote();
@@ -125,27 +136,27 @@ SequencesPanel.prototype._build = function() {
  * show, a selector in one and a column's resizer in the other, so a run can be followed while another column
  * is open. The count is dropped when there is nothing, a name reading "(0)" being noise rather than news.
  */
-SequencesPanel.prototype._updateTabName = function() {
+SequencesPanel.prototype._updateTabName = function(shown) {
   if (!this._sidePanel) {
     return;
   }
 
-  const held = this._sequences.all().length;
-
-  this._sidePanel.setTabLabel('sequences', held ? this._tabName + ' (' + held + ')' : this._tabName);
+  this._sidePanel.setTabLabel('sequences', shown ? this._tabName + ' (' + shown + ')' : this._tabName);
 };
 
 SequencesPanel.prototype._render = function() {
-  this._updateTabName();
-
   if (!this._inspector) {
     return;
   }
 
   this._inspector.innerHTML = '';
 
-  const held = this._sequences.all(),
+  // A performer that has closed is held whether or not it is listed, so what is dropped here is dropped from
+  // the showing alone; the archived rows of a performer still open are dropped within its list.
+  const held = this._sequences.all().filter((one) => this._showArchived || !one.closed),
         performers = this._filter === 'selected' ? held.filter((one) => this._concerns(one)) : held;
+
+  this._updateTabName(performers.length);
 
   if (!performers.length) {
     const hint = document.createElement('div');
@@ -170,7 +181,9 @@ SequencesPanel.prototype._render = function() {
       open: this._open.get(performer.key) === true,
       onToggle: (open) => this._open.set(performer.key, open),
       body: this._list(performer),
-      onClick: selection && selection.onClick
+      onClick: selection && selection.onClick,
+      closed: !!performer.closed,
+      onForget: performer.closed ? this._forgetPerformer(performer) : null
     });
 
     if (selection) {
@@ -191,36 +204,6 @@ SequencesPanel.prototype._token = function({ label, node }) {
 };
 
 /** The bar that says whether what a performer has done is kept in its list, as the Tokens tab draws one. */
-/**
- * Whether this performer keeps what has left it, standing at the head of its list and taking no part in the
- * order.
- *
- * It is a performer's own because a record is: what one performer did is no business of another, and a
- * reader recapping one order has no reason to forget the rest. It stands in the list rather than over the
- * tab for the same reason, and it is drawn as a bar rather than as a row so that it does not read as a token
- * the performer is to work on. What is asked for last is what a performer opened later is born with.
- */
-SequencesPanel.prototype._keepArchived = function(performer) {
-  const bar = document.createElement('label'),
-        toggle = document.createElement('span'),
-        box = document.createElement('input'),
-        slider = document.createElement('span'),
-        label = document.createElement('span');
-
-  bar.className = 'bjs-token-header wb-performer-keep';
-  toggle.className = 'bjs-token-toggle';
-  slider.className = 'bjs-token-toggle-slider';
-  box.type = 'checkbox';
-  box.checked = this._sequences.isKeepingArchived(performer.key);
-  box.addEventListener('change', () => this._sequences.keepArchived(performer.key, box.checked));
-  label.textContent = 'Keep archived tokens';
-
-  toggle.append(box, slider);
-  bar.append(toggle, label);
-
-  return bar;
-};
-
 /**
  * Whether a selection concerns this performer, which is what the filter selects on: its own token, a token
  * of its list, and a token standing at an ad hoc sub-process it performs for. Selecting a performer shows
@@ -336,15 +319,15 @@ SequencesPanel.prototype._list = function(performer) {
     onReorder: (keys) => this._sequences.setOrder(performer.key, keys)
   });
 
-  // What the performer keeps, at the head of its list and fixed there: it governs the list rather than
-  // standing in it, so nothing may be moved above it and it moves nowhere itself.
-  list.add(KEEP, this._keepArchived(performer), undefined, { fixed: true });
-
   performer.order.forEach((key) => {
     if (key === DIVIDER) {
       list.add(key, divider());
 
       return;
+    }
+
+    if (performer.archived.has(key) && !this._showArchived) {
+      return; // held, and not listed: the tab is showing what the performer is still to do
     }
 
     const archived = performer.archived.has(key),
@@ -443,6 +426,25 @@ SequencesPanel.prototype._frozen = function(performer, key, contentEl) {
   });
 };
 
+/**
+ * The offer to forget a performer that has closed, which is the only performer a reader may take away: an
+ * open one is a list the run is still working through.
+ */
+SequencesPanel.prototype._forgetPerformer = function(performer) {
+  const button = document.createElement('button');
+
+  button.type = 'button';
+  button.className = 'bjs-collapsible-entry-control wb-forget';
+  button.title = 'Forget this performer';
+  button.innerHTML = DELETE_ICON;
+  button.addEventListener('click', (event) => {
+    event.stopPropagation(); // the row selects its token; this takes the record away
+    this._sequences.forgetPerformer(performer.key);
+  });
+
+  return button;
+};
+
 /** The offer to forget one archived row, which is the only row a reader may take away. */
 SequencesPanel.prototype._forget = function(performer, key) {
   const button = document.createElement('button');
@@ -456,11 +458,15 @@ SequencesPanel.prototype._forget = function(performer, key) {
   return button;
 };
 
-/** The colour the animation draws that token in, where it has drawn it. */
-SequencesPanel.prototype._color = function(identity) {
-  const drawn = this._token(identity);
+/**
+ * The colour the performer's own token is drawn in: the animation's, while it holds the token, and otherwise
+ * the one the store captured when the performer opened. A closed performer is a record of what one performer
+ * did, and its colour is what says whose record it is, so it is the one thing here that outlives the token.
+ */
+SequencesPanel.prototype._color = function(performer) {
+  const drawn = this._token(performer);
 
-  return drawn ? drawn.color : null;
+  return (drawn && drawn.color) || performer.color || null;
 };
 
 /** A pool shows the process it stands for, as the Tokens tab shows it. */

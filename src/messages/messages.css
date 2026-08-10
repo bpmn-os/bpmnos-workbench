@@ -27,3 +27,11 @@
   cursor: default;
   opacity: 0.6;
 }
+
+/* A message the run has finished with is a record of what became of it, not an offer: faded exactly as the
+   row of a token being conducted is, summary and disclosure alike, and the token that took it faded with
+   it. Its selection tint and its hover are untouched, the rows still selecting like any other. */
+.wb-message-archived > .bjs-collapsible-entry-header,
+.wb-message-archived > .bjs-collapsible-entry-entries {
+  opacity: 0.55;
+}

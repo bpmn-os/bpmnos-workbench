@@ -70,6 +70,10 @@ export class Decisions extends DecisionStore {
     return this._announce(super.await_(key));
   }
 
+  forget(key) {
+    return this._announce(super.forget(key));
+  }
+
   clear() {
     return this._announce(super.clear());
   }

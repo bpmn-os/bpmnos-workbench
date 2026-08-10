@@ -22,6 +22,7 @@ import { next, shownValue, snap, walkable } from './grid.js';
  * @param {boolean} [options.open=false]  whether the row starts expanded
  * @param {Function} [options.onToggle]   (open) => void
  * @param {Element} [options.control]     the offer to submit, held right of the label
+ * @param {boolean} [options.archived]    the run has answered it: a record rather than a question
  * @param {Element} [options.body]        what the expanded row shows
  * @param {Function} [options.onClick]    (originalEvent) => void, a click on the row rather than the caret
  */
@@ -50,6 +51,12 @@ export default function createDecisionEntry(decision, options = {}) {
   });
 
   entry.element.classList.add('bjs-token-entry');
+
+  // A decision the run has answered is a record of what was chosen: faded as a token being conducted is,
+  // its choices readable but not answerable, and offering forgetting in place of the submission.
+  if (options.archived) {
+    entry.element.classList.add('wb-decision-archived');
+  }
 
   if (options.body) {
     entry.contentEl.appendChild(options.body);
@@ -97,8 +104,12 @@ export default function createDecisionEntry(decision, options = {}) {
  *                         multipleOf?, value? }`, or `{ attribute: s }` alone where it cannot yet be made
  * @param {Function} onChange  (value) => void
  */
-export function createChoiceRow(choice, onChange) {
+export function createChoiceRow(choice, onChange, readOnly) {
   const row = el('div', 'wb-choice');
+
+  if (readOnly) {
+    row.classList.add('wb-choice-readonly');
+  }
 
   row.appendChild(text('div', 'wb-choice-name', choice.attribute || ''));
 
@@ -106,11 +117,20 @@ export function createChoiceRow(choice, onChange) {
     const select = enumerationControl(choice);
 
     select.className = 'wb-choice-control';
+    select.disabled = select.disabled || !!readOnly; // a choice not yet reachable offers nothing either
     select.addEventListener('change', () => onChange(read(select, choice)));
 
     row.appendChild(select);
   } else {
-    row.appendChild(spinner(choice, onChange));
+    const control = spinner(choice, onChange);
+
+    if (readOnly) {
+      // what was chosen, not a choice to make: the value reads and copies, and refuses only the edit
+      control.querySelectorAll('input').forEach((field) => { field.readOnly = true; });
+      control.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+    }
+
+    row.appendChild(control);
   }
 
   notes(choice).forEach((note) => row.appendChild(note));

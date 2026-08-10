@@ -135,80 +135,33 @@ test('an archived row may be forgotten, and a waiting one may not', () => {
   assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ]);
 });
 
-test('where the archive is not kept, a token that leaves is forgotten as it leaves', () => {
-  const store = machine();
-
-  store.keepArchived(KEY, false);
-  store.queue(KEY, token('Job1'));
-  store.queue(KEY, token('Job2'));
-  store.conduct(KEY, token('Job1'));
-  store.archive(KEY, token('Job1'));
-
-  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ]);
-});
-
-test('turning the archive off forgets what is held, and turning it on keeps what comes', () => {
+test('a performer that closes is kept as a record, and only a closed one may be forgotten', () => {
   const store = machine();
 
   store.queue(KEY, token('Job1'));
-  store.queue(KEY, token('Job2'));
-  store.conduct(KEY, token('Job1'));
-  store.archive(KEY, token('Job1'));
 
-  assert.equal(store.keepArchived(KEY, false), true);
-  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ]);
-
-  assert.equal(store.keepArchived(KEY, true), true, 'and the record begins afresh');
-  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job2|Task' ], 'rather than restoring what went');
-  assert.equal(store.isKeepingArchived(KEY), true);
-});
-
-test('the record is a performer\'s own: what one forgets, another keeps', () => {
-  const store = machine();
-
-  store.open('Job2', 'Machine');
-
-  const OTHER = 'Job2|Machine';
-
-  [ KEY, OTHER ].forEach((key) => {
-    store.queue(key, token('Job1'));
-    store.conduct(key, token('Job1'));
-    store.archive(key, token('Job1'));
-  });
-
-  assert.equal(store.keepArchived(KEY, false), true);
-
-  assert.deepEqual(store.get(KEY).order, [ DIVIDER ], 'the one that was turned off forgot what it held');
-  assert.deepEqual(store.get(OTHER).order, [ 'Job1|Task', DIVIDER ], 'and the other kept it, above the divider');
-  assert.equal(store.isKeepingArchived(KEY), false);
-  assert.equal(store.isKeepingArchived(OTHER), true);
-});
-
-test('a performer opened later is born as the reader last asked', () => {
-  const store = machine();
-
-  store.keepArchived(KEY, false);
-  store.open('Job3', 'Machine');
-
-  const LATER = 'Job3|Machine';
-
-  assert.equal(store.isKeepingArchived(LATER), false, 'a run opens performers as it goes');
-
-  store.queue(LATER, token('Job1'));
-  store.conduct(LATER, token('Job1'));
-  store.archive(LATER, token('Job1'));
-
-  assert.deepEqual(store.get(LATER).order, [ DIVIDER ], 'so what leaves it is forgotten as it leaves');
-});
-
-test('a performer closes with what it held', () => {
-  const store = machine();
-
-  store.queue(KEY, token('Job1'));
+  assert.equal(store.forgetPerformer(KEY), false, 'an open one is a list the run is still working through');
 
   assert.equal(store.close('Instance1', 'Machine'), true);
+  assert.equal(store.isClosed(KEY), true, 'it stays, as a record of what it did');
+  assert.deepEqual(store.get(KEY).order, [ DIVIDER, 'Job1|Task' ], 'with the order it worked in');
+
+  assert.equal(store.forgetPerformer(KEY), true, 'and the reader may take it away');
   assert.deepEqual(store.all(), []);
-  assert.equal(store.close('Instance1', 'Machine'), false, 'and closes once');
+});
+
+test('a performer holds the colour its token was drawn in, which outlives the token', () => {
+  const store = new SequenceStore(MODEL);
+
+  store.open('Instance1', 'Machine', '#3c8');
+  store.close('Instance1', 'Machine');
+
+  assert.equal(store.get(KEY).color, '#3c8', 'a closed performer is known by the colour it performed in');
+
+  const uncoloured = new SequenceStore(MODEL);
+
+  uncoloured.open('Instance1', 'Machine');
+  assert.equal(uncoloured.get(KEY).color, null, 'and a host that draws nothing says nothing');
 });
 
 test('performers of one node in several instances are told apart', () => {

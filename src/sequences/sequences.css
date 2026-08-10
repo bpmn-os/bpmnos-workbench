@@ -28,8 +28,16 @@
   opacity: 0.55;
 }
 
-/* the offer to forget an archived row: the side panel's own control shape, and the size the message tab's
-   offer to deliver uses, so a control reads the same wherever a row carries one */
+/* A performer that has closed is a record of what it did: greyed as an archived row is, summary and
+   disclosure alike, so that what it shows says it is no longer a list the reader may order. Its selection
+   tint and its hover are untouched, it still standing for a token that selects like any other. */
+.wb-performer-closed > .bjs-collapsible-entry-header,
+.wb-performer-closed > .bjs-collapsible-entry-entries {
+  opacity: 0.55;
+}
+
+/* the offer to forget an archived row or a closed performer: the side panel's own control shape, and the
+   size the message tab's offer to deliver uses, so a control reads the same wherever a row carries one */
 .wb-forget svg {
   width: 12px;
   height: 12px;
@@ -53,33 +61,3 @@
   color: var(--bjs-grey-55, hsl(225, 10%, 55%));
 }
 
-/* What a performer keeps, at the head of its list. It says something about the list rather than standing in
-   it, which is what the divider below also does, so the two are drawn alike: italic and grey, with no field
-   and no rule of its own. Its switch is smaller than the one a tab's setting wears and stays grey when it is
-   on, since a row that is merely true has no reason to be the brightest thing in the panel. */
-.wb-performer-keep {
-  min-height: 36px;
-  max-height: 36px;
-  padding: 6px 10px;
-  background: none;
-  font-style: italic;
-  color: var(--bjs-grey-55, hsl(225, 10%, 55%));
-}
-
-.wb-performer-keep .bjs-token-toggle {
-  width: 24px;
-  height: 12px;
-}
-
-.wb-performer-keep .bjs-token-toggle-slider::before {
-  width: 8px;
-  height: 8px;
-}
-
-.wb-performer-keep .bjs-token-toggle input:checked + .bjs-token-toggle-slider {
-  background-color: var(--bjs-grey-55, hsl(225, 10%, 55%));
-}
-
-.wb-performer-keep .bjs-token-toggle input:checked + .bjs-token-toggle-slider::before {
-  transform: translateX(12px);
-}
