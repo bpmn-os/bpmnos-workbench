@@ -18,7 +18,7 @@ test('a node reports what it declares and what it inherits, outermost first', as
     [ 'Timestamp', 'Status_Amount', 'Status_Note' ]);
   assert.deepEqual(declared.data.map((attribute) => attribute.id),
     [ 'Instance', 'Data_Main', 'Data_Plain' ]);
-  assert.deepEqual(declared.globals.map((attribute) => attribute.id), [ 'Global_Budget' ]);
+  assert.deepEqual(declared.globals.map((attribute) => attribute.id), [ 'Objective', 'Global_Budget' ]);
 });
 
 test('a data attribute names the scope declaring it, which is the scope its container belongs to', async () => {

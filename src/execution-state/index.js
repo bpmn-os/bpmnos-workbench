@@ -81,6 +81,6 @@ export function createTokenDetailRenderer(injector) {
   };
 }
 
-export { default as ExecutionStateStore, attributeName, isKeyword, INSTANCE, TIMESTAMP } from './Store.js';
+export { default as ExecutionStateStore, attributeName, isKeyword, INSTANCE, TIMESTAMP, OBJECTIVE } from './Store.js';
 export { default as createExecutionStateView } from './View.js';
 export { default as sections } from './sections.js';

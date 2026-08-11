@@ -1,20 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  The job shop scheduling model of BPMNOSInstances.jl, copied here so that the tests read a real model: a
-  collaboration of two participants, each declaring the keyword attributes of its own process, with a
-  multi-instance sub-process in one and an event sub-process holding an ad-hoc sub-process in the other.
-
-  One edit was made to the copy. The restriction `Condition_05rdls5` carried `parameter="[object Object]"`,
-  a stringified object written into an attribute the schema does not define, which is a defect of the model
-  in that repository rather than of anything read here.
--->
 <bpmn2:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bpmnos="https://bpmnos.telematique.eu" id="sample-diagram" targetNamespace="http://bpmn.io/schema/bpmn" xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd">
   <bpmn2:collaboration id="Job_shop_scheduling_problem">
-    <bpmn2:extensionElements>
-      <bpmnos:attributes>
-        <bpmnos:attribute id="Makespan" type="decimal" name="makespan := 0" objective="minimize" weight="1" />
-      </bpmnos:attributes>
-    </bpmn2:extensionElements>
     <bpmn2:participant id="Participant_1c07lhk" name="Job process" processRef="JobProcess" />
     <bpmn2:participant id="Participant_0gkimz7" name="Machine process" processRef="MachineProcess" />
     <bpmn2:messageFlow id="Flow_1yu534x" sourceRef="RequestTask" targetRef="CatchRequestMessage" />
@@ -106,6 +92,7 @@
         </bpmnos:attributes>
       </bpmn2:extensionElements>
     </bpmn2:dataObject>
+    <bpmn2:dataStoreReference id="DataStoreReference_1" name="Globals" dataStoreRef="DataStore_2" />
   </bpmn2:process>
   <bpmn2:process id="MachineProcess" isExecutable="true">
     <bpmn2:extensionElements>
@@ -202,6 +189,20 @@
     </bpmn2:intermediateCatchEvent>
     <bpmn2:performer name="Sequential" />
   </bpmn2:process>
+  <bpmn2:dataStore id="DataStore_1">
+    <bpmn2:extensionElements>
+      <bpmnos:attributes>
+        <bpmnos:attribute id="Objective" type="decimal" name="objective := 0" />
+      </bpmnos:attributes>
+    </bpmn2:extensionElements>
+  </bpmn2:dataStore>
+  <bpmn2:dataStore id="DataStore_2">
+    <bpmn2:extensionElements>
+      <bpmnos:attributes>
+        <bpmnos:attribute id="Makespan" type="decimal" name="makespan := 0" objective="minimize" weight="1" />
+      </bpmnos:attributes>
+    </bpmn2:extensionElements>
+  </bpmn2:dataStore>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Job_shop_scheduling_problem">
       <bpmndi:BPMNShape id="Participant_1c07lhk_di" bpmnElement="Participant_1c07lhk" isHorizontal="true">
@@ -321,6 +322,9 @@
         <di:waypoint x="810" y="-12" />
         <di:waypoint x="810" y="275" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="DataStoreReference_1_di" bpmnElement="DataStoreReference_1">
+        <dc:Bounds x="360" y="340" width="50" height="50" />
+      </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn2:definitions>

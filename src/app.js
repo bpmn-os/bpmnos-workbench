@@ -20,6 +20,11 @@ import BpmnModeler from 'bpmn-js/lib/Modeler.js';
 import { BpmnPropertiesPanelModule } from 'bpmn-js-properties-panel';
 import SidePanelModule from 'bpmn-js-side-panel';
 
+// A bpmn:DataStore behind every bpmn:DataStoreReference. bpmn-js creates the store's counterpart, a
+// bpmn:DataObject, for every bpmn:DataObjectReference, and creates nothing for a store, so a store
+// reference would refer to nothing and the globals it declares would have nowhere to live.
+import DataStoreModule from 'bpmn-js-datastore';
+
 import LintModule from 'bpmn-js-bpmnlint';
 import getRules from 'bpmnos-js/rules';           // the authoritative BPMN-OS rule set (essentials + engine/* + bpmnos/*)
 import IssuesPanelModule from 'bpmn-workbench/issues'; // self-registering "Issues" side-panel tab
@@ -145,6 +150,7 @@ const modeler = new BpmnModeler({
       + '</div>'
   },
   additionalModules: [
+    DataStoreModule,     // → a bpmn:DataStore behind every bpmn:DataStoreReference
     BpmnPropertiesPanelModule,
     BPMNOSModule,
     ExecutionDataModule, // → `executionData`: what each element declares and inherits (not in the full module)

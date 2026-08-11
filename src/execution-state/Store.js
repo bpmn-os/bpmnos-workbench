@@ -39,26 +39,29 @@ const GLOBALS = 'globals';
 const SEPARATOR = '|';
 
 /**
- * The two attributes the engine identifies by their identifier rather than by their name, matched against
- * `BPMNOS::Keyword`. `Timestamp` is the first status attribute of every process and `Instance` the first
- * data attribute, and the engine refuses to load a model declaring them elsewhere.
+ * The three attributes the engine identifies by their identifier rather than by their name, matched against
+ * `BPMNOS::Keyword`. `Timestamp` is the first status attribute of every process, `Instance` the first data
+ * attribute and `Objective` the first global, and the engine refuses to load a model declaring one of them
+ * elsewhere.
  */
 export const TIMESTAMP = 'Timestamp';
 export const INSTANCE = 'Instance';
+export const OBJECTIVE = 'Objective';
 
 /**
- * Whether an attribute is one of the two keywords, which the store neither holds nor answers for.
+ * Whether an attribute is one of the keywords, which the store neither holds nor answers for.
  *
- * Both are shown elsewhere, and holding them here would be holding a value that is already on the screen.
+ * Each is shown elsewhere, and holding it here would be holding a value that is already on the screen.
  * A token's `Instance` is its label, which every token entry carries in its summary row, and it is by
  * construction the label the workbench gives the token; it is also per container, immutable once set, and
  * owned by no identifiable token, so it could not be stored by the ownership rule in any case. A token's
  * `Timestamp` is in step with the system state at the moment its record is emitted, which is what the clock
  * on the canvas reads, so it is on the screen already, and it is the one attribute that moves on nearly
- * every record.
+ * every record. The `Objective` is what the objective chip on the canvas reads, and it belongs to the run
+ * rather than to any token, so a Globals row for it would repeat the chip once per token.
  */
 export function isKeyword(attribute) {
-  return attribute.id === TIMESTAMP || attribute.id === INSTANCE;
+  return attribute.id === TIMESTAMP || attribute.id === INSTANCE || attribute.id === OBJECTIVE;
 }
 
 export default class ExecutionStateStore {
