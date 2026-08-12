@@ -1,4 +1,5 @@
 import { is, isAny } from 'bpmn-js/lib/util/ModelUtil.js';
+import replayed from '../replayed.js';
 
 import { processOf } from '../animation-tokens.js';
 import sections from '../execution-state/sections.js';
@@ -87,6 +88,10 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   // through `setDisplay` rather than injected, and a host that has none — a test, the demo page — is served
   // by a player that writes to nothing.
   this._display = null;
+
+  // Whether what is being played is a log rather than a run this workbench is driving. It changes what the
+  // player must derive for itself: a run the engine drives announces its requests, a replayed log may not.
+  this._replayed = replayed(eventBus, () => {});
 
   this._log = null;
   this._state = 'idle'; // 'idle' | 'playing' | 'paused'
@@ -748,6 +753,19 @@ EngineLogPlayer.prototype._apply = function(record) {
   // whether the choices were made or the token did not survive to make them.
   if (this._decisions && record.nodeId && record.state !== 'BUSY') {
     this._decisions.close(record.instanceId, record.nodeId, this._colorOf(record.instanceId));
+  }
+
+  // A replayed log opens one on the other side of the same fact. A run the engine drives is told which
+  // token it is asking, by the request it announces; a log may carry no such record, and needs none, since
+  // a token standing busy at a decision task is a decision being made and the node says as much. What the
+  // choices are named is not read here: a choice names its attribute inside the condition it states, which
+  // `Choice::Choice` is what parses, so the names arrive with the values in the record of what was decided.
+  if (this._decisions && this._replayed() && record.nodeId && record.state === 'BUSY') {
+    const element = this._elementRegistry.get(record.nodeId);
+
+    if (element && isDecisionTask(element)) {
+      this._decisions.open(record.instanceId, record.nodeId);
+    }
   }
 
   // A token leaving takes its values with it: the execution state forgets it, and every record about it —

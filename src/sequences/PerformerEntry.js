@@ -27,11 +27,15 @@ export default function createPerformerEntry(performer, options = {}) {
   summary.appendChild(markEl(performer));
   summary.appendChild(info);
 
+  // A performer with nothing under it is a plain row. That happens where a replayed log holds no queue to
+  // show and the performer has neither performed nor is performing: a caret there would open on nothing.
+  // The side panel keeps the caret's space on such a row and renders it inert, so the list stays aligned.
   const entry = createCollapsibleEntry({
     id: performer.key,
     label: summary,
     open: !!options.open,
     toggleOn: 'caret',
+    expandable: options.expandable !== false,
     onToggle: options.onToggle
   });
 
@@ -46,7 +50,8 @@ export default function createPerformerEntry(performer, options = {}) {
     entry.controlsEl.appendChild(options.onForget);
   }
 
-  if (options.body) {
+  // A plain row has no body to put anything in, which is what a performer holding nothing is drawn as.
+  if (options.body && entry.contentEl) {
     entry.contentEl.appendChild(options.body);
   }
 

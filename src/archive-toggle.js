@@ -11,10 +11,15 @@
  * whole of it. What is forgotten is forgotten one entry at a time, by the trash the entry carries, so that
  * every act of forgetting is an act the reader aimed at something.
  *
+ * A replayed log is not the reader's to set this on. Such a run is read rather than followed, and the whole
+ * of what it holds is what a reader wants in front of them, so the control is fixed on and greyed. It is
+ * fixed rather than taken away, because what it says of that tab is true — the archive is listed — and a
+ * control that vanished would leave the reader looking for a setting that is still in force.
+ *
  * @param {string} name  what is archived, for the control's own explanation
  * @param {() => boolean} isOn
  * @param {(on: boolean) => void} setOn
- * @returns {{ element: HTMLElement, refresh: () => void }}
+ * @returns {{ element: HTMLElement, refresh: () => void, setFixed: (boolean) => void }}
  */
 export default function createArchiveToggle(name, isOn, setOn) {
   const element = document.createElement('label'),
@@ -43,6 +48,13 @@ export default function createArchiveToggle(name, isOn, setOn) {
     element,
     refresh() {
       box.checked = !!isOn();
+    },
+    setFixed(fixed) {
+      box.disabled = !!fixed;
+      element.classList.toggle('wb-archive-toggle-fixed', !!fixed);
+      element.title = fixed
+        ? 'A replayed log is read whole: ' + name + ' the run finished with are listed'
+        : 'List ' + name + ' the run has finished with';
     }
   };
 }

@@ -5,6 +5,7 @@ import answerable from '../answerable.js';
 import createArchiveToggle from '../archive-toggle.js';
 import renderFrozenValues from '../frozen-values.js';
 import addFilter from '../panel-filter.js';
+import replayed from '../replayed.js';
 import { selectionFor } from '../token-rows/select.js';
 import { DIVIDER } from './Store.js';
 import createPerformerEntry from './PerformerEntry.js';
@@ -43,6 +44,13 @@ export default function SequencesPanel(injector, eventBus, sequences, config) {
   // An order is the reader's only where the run asks them for one, which is a manual run and nothing else.
   this._answerable = answerable(eventBus, () => this._render());
 
+  // A replayed log is a record: it lists the performers that closed and the one still conducting, with what
+  // each worked through, and not the queue of what a run is still to do.
+  this._replayed = replayed(eventBus, () => {
+    this._syncControls();
+    this._render();
+  });
+
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('sequences.changed', () => this._render());
   eventBus.on('mode.changed', () => this._applyNote());
@@ -75,18 +83,44 @@ SequencesPanel.prototype._init = function() {
   // What the tab shows of what the run has finished with, at its foot, where the token panel keeps the
   // controls a run is driven by. It governs the whole list rather than one performer, a reader asking the
   // question of the record and not of each holder of it.
-  footer.appendChild(createArchiveToggle(
+  this._archiveToggle = createArchiveToggle(
     'the performers that have closed, and the tokens that have left one',
-    () => this._showArchived,
+    () => this._archiveShown(),
     (on) => {
       this._showArchived = on;
       this._render();
     }
-  ).element);
+  );
+
+  footer.appendChild(this._archiveToggle.element);
 
   this._build();
+  this._syncControls();
   this._render();
   this._applyNote();
+};
+
+/**
+ * Whether the archive is listed, which in a replayed log is not the reader's to say: such a run is read
+ * whole rather than followed, so the setting is fixed on and what it was left at elsewhere is ignored.
+ */
+SequencesPanel.prototype._archiveShown = function() {
+  return this._replayed() || this._showArchived;
+};
+
+/** The controls of the tab, as the source they belong to allows: what may be set, and what may be asked. */
+SequencesPanel.prototype._syncControls = function() {
+  const record = this._replayed();
+
+  if (this._archiveToggle) {
+    this._archiveToggle.refresh();
+    this._archiveToggle.setFixed(record);
+  }
+
+  if (this._filterControl) {
+    this._filterControl.setFixed(record);
+    this._filter = 'all'; // a fixed filter states what the tab lists, so it narrows nothing
+  }
 };
 
 /**
@@ -111,7 +145,7 @@ SequencesPanel.prototype._build = function() {
   // list is an order, and an order shown in part is no order: an arrow would move a token past neighbours
   // the reader cannot see. What it selects on is the performer's own token, the tokens of its list, and the
   // ad hoc sub-processes it performs for.
-  addFilter(heading, {
+  this._filterControl = addFilter(heading, {
     name: 'wb-sequence-filter',
     onChange: (value) => {
       this._filter = value;
@@ -156,7 +190,7 @@ SequencesPanel.prototype._render = function() {
 
   // A performer that has closed is held whether or not it is listed, so what is dropped here is dropped from
   // the showing alone; the archived rows of a performer still open are dropped within its list.
-  const held = this._sequences.all().filter((one) => this._showArchived || !one.closed),
+  const held = this._sequences.all().filter((one) => this._archiveShown() || !one.closed),
         performers = this._filter === 'selected' ? held.filter((one) => this._concerns(one)) : held;
 
   this._updateTabName(performers.length);
@@ -180,10 +214,16 @@ SequencesPanel.prototype._render = function() {
       nodeId: performer.node
     });
 
+    // What the performer holds that this run may show. A replayed log withholds the queue, so a performer
+    // that has neither performed nor is performing holds nothing, and its row opens on nothing.
+    const body = this._list(performer),
+          holds = !this._replayed() || !!performer.conducting || performer.archived.size > 0;
+
     const entry = createPerformerEntry(this._summary(performer), {
-      open: this._open.get(performer.key) === true,
+      open: holds && this._open.get(performer.key) === true,
       onToggle: (open) => this._open.set(performer.key, open),
-      body: this._list(performer),
+      expandable: holds,
+      body,
       onClick: selection && selection.onClick,
       closed: !!performer.closed,
       onForget: performer.closed ? this._forgetPerformer(performer) : null
@@ -326,19 +366,31 @@ SequencesPanel.prototype._list = function(performer) {
     onReorder: (keys) => this._sequences.setOrder(performer.key, keys)
   });
 
+  // A replayed log shows the order the performer worked in and nothing of what it was still to do: the
+  // queue is where the reader put it, and there is no reader here. The divider goes with the queue, having
+  // nothing left to divide what has been done from.
+  const record = this._replayed();
+
   performer.order.forEach((key) => {
     if (key === DIVIDER) {
-      list.add(key, divider());
+      if (!record) {
+        list.add(key, divider());
+      }
 
       return;
     }
 
-    if (performer.archived.has(key) && !this._showArchived) {
+    const archived = performer.archived.has(key);
+
+    if (archived && !this._archiveShown()) {
       return; // held, and not listed: the tab is showing what the performer is still to do
     }
 
-    const archived = performer.archived.has(key),
-          settled = archived || key === performer.conducting || key === performer.committed,
+    if (record && !archived && key !== performer.conducting) {
+      return; // waiting, which is a question about a run in progress and not a record of one
+    }
+
+    const settled = archived || key === performer.conducting || key === performer.committed,
           row = this._row(performer, key, archived);
 
     if (row) {

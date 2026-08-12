@@ -1,0 +1,17 @@
+/* The `all` / `selected tokens` filter of a heading, in Messages, Sequences and Decisions.
+
+   Only the fixed state is declared here. The options themselves stand in the token panel's own heading,
+   `bjs-token-filter`, and take that package's appearance, which is what makes the four tabs a run concerns
+   one list rather than four that resemble each other.
+
+   A replayed log fixes the filter on `all`: a selection is a question about what a run is doing now, and
+   these rows are records of a run that is over. It is faded as the archive toggle beside it is, the two
+   being one thing said twice — this tab states what it holds rather than asking the reader what to show. */
+.wb-filter-fixed {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.wb-filter-fixed input {
+  cursor: default;
+}

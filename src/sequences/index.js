@@ -1,3 +1,4 @@
+import collectPerformers from './performers.js';
 import SequenceStore, { DIVIDER, keyOf } from './Store.js';
 import SequencesPanel from './Panel.js';
 
@@ -30,6 +31,7 @@ export class Sequences extends SequenceStore {
 
     this._eventBus = eventBus;
     this._injector = injector;
+    this._source = null; // which run is on, since only one of them resolves the model here
 
     // The braces matter: a listener returning a value is a listener that has answered the event, and
     // diagram-js stops the event there.
@@ -45,6 +47,38 @@ export class Sequences extends SequenceStore {
         this._answer();
       }
     });
+
+    // A replayed log has no engine to resolve the model, so the model is read where it is. A run the engine
+    // drives says it itself, through `describeModel`, and is left to: the two readings are of one model and
+    // the engine's is the authority, so the one made here stands only where there is no engine to ask.
+    eventBus.on('source.changed', ({ source }) => {
+      this._source = source;
+
+      if (source === 'playback') {
+        this.readModel();
+      }
+    });
+
+    // and again when the model changes under a reader who is replaying logs against it. A run the engine
+    // drives is left alone here too: it reads the new model itself when it begins.
+    eventBus.on('import.done', () => {
+      if (this._source === 'playback') {
+        this.readModel();
+      }
+    });
+  }
+
+  /**
+   * Read the sequential performers from the diagram, for a run that has no engine to ask.
+   *
+   * What is read is the engine's own resolution, restated in `performers.js` against the moddle. It replaces
+   * what the store held, a model being one thing at a time.
+   */
+  readModel() {
+    const bpmnjs = this._injector.get('bpmnjs', false),
+          definitions = bpmnjs && bpmnjs.getDefinitions && bpmnjs.getDefinitions();
+
+    this.setModel(definitions ? collectPerformers(definitions) : []);
   }
 
   open(label, node, color) {
@@ -124,6 +158,12 @@ export class Sequences extends SequenceStore {
 
     if (!this._playing()) {
       return false; // a paused run advances nothing, and an offer would advance it
+    }
+
+    if (this._source === 'playback') {
+      // A replayed log is answered: the order it worked in is in the records, and an offer made here would
+      // reach no engine and would anchor a token as though the reader had placed it there.
+      return false;
     }
 
     this.all().forEach((held) => {

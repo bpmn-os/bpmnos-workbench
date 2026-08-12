@@ -123,7 +123,8 @@ Key source (this repo):
   announcing `sequences.changed` and offering the first token above a divider through `manual.decide`),
   `Panel.js` (the "Sequences" tab, one `createOrderedListEntry` per performer holding the conducted token as
   its anchor, the waiting tokens and the divider), `PerformerEntry.js` (the performer drawn as `bpmn-font`'s
-  participant, collapsed sub-process or ad hoc sub-process, marked with its token) and `sequences.css`.
+  participant, collapsed sub-process or ad hoc sub-process, marked with its token), `performers.js` (the
+  performers a model states, read from the model itself, plain and node-testable) and `sequences.css`.
 
   The store is written by the player, as the execution state and the messages are, so it shows what the
   canvas shows: a performer is opened when the token at a performing node is drawn `BUSY` and closed on
@@ -132,6 +133,18 @@ Key source (this repo):
   `describeModel` once a run begins; which token performs for a given activity token is the climb from it to
   the token standing at the performer node, through the animation's own parentage. Nothing decodes an
   identifier and nothing reads the engine's present, which runs far ahead of the diagram.
+
+  A replayed log has no engine to ask, and the answer is a property of the model rather than of a run, so it
+  is read from the model instead, by `performers.js` over the moddle tree, whenever a log is replayed and
+  whenever a model is imported under one. What it reads is the engine's own resolution and not a reading of
+  what a model usually looks like: every ad hoc sub-process is a sequential one, since `Model` builds each as
+  a `SequentialAdHocSubProcess` and that refuses any other ordering; the node performing for it is found by
+  climbing its parents for the first activity declaring a `bpmn:performer` named `Sequential`, stopping at an
+  enclosing ad hoc sub-process, falling back to the process where the process declares one and to the
+  sub-process itself where nothing does; and what it performs is that sub-process's direct child activities.
+  The two readings are of one model and must agree, a run being replayable beside the run that produced it,
+  and they are checked to agree on the corpus. Where the engine's rules change, this changes with them. A run
+  the engine drives asks the engine and is not touched by any of this.
 
   A token waiting is where the reader put it. What is offered moves once, to the front of what is still to
   come, and is anchored there, a decision given being one that cannot be taken back; it is greyed when it is
@@ -177,16 +190,40 @@ Key source (this repo):
   of what it did, and turning it on again brings the whole of it back. What is forgotten is forgotten one
   entry at a time, so that every act of forgetting is one the reader aimed at something. The tab's own name
   counts what is shown rather than what is held, being what a reader is looking at.
+
+  A replayed log withholds what only an engine could answer, which `src/replayed.js` answers for the three
+  tabs from the same `source.changed`. This is a second question and not the first one again: a greedy run is
+  no more the reader's to answer than a replay is, but it is a run in progress and may be asked, where a
+  replay has nothing to ask. What a record says stands — a message was sent, a decision task is waiting, a
+  performer conducted this and is conducting that — and what an engine standing at the token would have
+  answered does not. So a message is listed from the moment it was sent and says nothing of who might take
+  it, since which tokens may is the recipient header the engine evaluated as each request was made, and it
+  names the token that actually took it when the delivery is drawn. A decision task is listed while it waits
+  and its choices are written as a token entry writes an attribute, with no options and no control, since
+  what a choice may take is an expression over the status, the data and the globals. A performer is listed
+  from the moment its token stands `BUSY`, as in any run, and shows what it has performed and what it is
+  conducting but not what is queued behind, an entry being the performer's to grant; the divider goes with
+  the queue, having nothing left to divide what is done from.
+
+  Both controls of such a tab are greyed, and a greyed control states what the tab is showing rather than
+  asking the reader, so neither goes on narrowing anything from a setting left over elsewhere. The filter
+  reads `all`, a selection being a question about a run in progress. "Show archive" reads on, a log being
+  read whole rather than followed. Both are fixed rather than taken away, so that a tab keeps the shape it
+  has in every run and a reader is not left looking for a setting that is still in force.
 - `src/decisions/` — the decision tasks a run waits at and the choices each waits for: `Store.js` (plain,
   node-testable, holding per decision what the engine has answered and what the reader has entered),
-  `declarations.js` (the choices a task states, read from `bpmnos:decisions` in the model),
-  `DecisionEntry.js` (the task drawn with `bpmnos-js/decision-task-symbol` marked with its token, and a
-  choice as its attribute above the control that takes it), `grid.js` (the values a bounded choice admits
-  and the arithmetic of moving among them, plain and node-testable), `Panel.js` (the "Decisions" tab) and
-  `decisions.css`.
+  `walk.js` (asking what each choice of one task may take, one at a time and against the values already
+  selected, plain and node-testable), `DecisionEntry.js` (the task drawn with
+  `bpmnos-js/decision-task-symbol` marked with its token, and a choice as its attribute above the control
+  that takes it), `grid.js` (the values a bounded choice admits and the arithmetic of moving among them,
+  plain and node-testable), `Panel.js` (the "Decisions" tab) and `decisions.css`.
 
-  Which choices a task states is model knowledge and is read from the moddle extension; what each may take
-  is a run's answer and is asked of the bridge. The two are separate because a choice is bounded or
+  Which choices a task states is model knowledge and what each may take is a run's answer, and both are
+  asked of the bridge, the first through `describeModel` and the second through the controller. Neither is
+  read from the model here, and the first cannot be: a `bpmnos:decision` states an `id` and a `condition`,
+  and the attribute a choice decides is named inside that expression, which `Choice::Choice` is what parses.
+  A caller reading it again would restate the engine's grammar in another language and would be wrong
+  wherever the two readings differed. The two are asked separately because a choice is bounded or
   enumerated by an expression over the status, the data and the globals, so only an engine standing at the
   token can evaluate it, and because a decision task states its choices in order with a later one depending
   on the earlier ones — `DecisionTask::determineAlternatives` writes each chosen value into the status
@@ -267,9 +304,13 @@ Key source (this repo):
   column's resizer in the other. The count is dropped when there is nothing, and it is the tab's name alone:
   the heading in the band keeps the plain word.
 - `src/panel-filter.js` — the `all` / `selected tokens` filter of a heading, taking the radio group's name,
-  since radios of one name are one group and two tabs are alive at once.
+  since radios of one name are one group and two tabs are alive at once. It is greyed and reads `all` where
+  a tab shows records, and narrows nothing while it is.
 - `src/answerable.js` — whether what a run shows is the reader's to answer, which is a manual run and nothing
   else, read from `source.changed` and reported to a panel as it changes.
+- `src/replayed.js` — whether what a run shows is a record of a run that is over, which is a replayed log and
+  nothing else, read from the same announcement and on the same terms. The two are separate questions and
+  a greedy run is what tells them apart, being unanswerable and a run in progress at once.
 - `src/frozen-values.js` — the values a token held as it finished, drawn as a token entry draws what a token
   holds, which is how every archive of a run discloses them.
 - `src/animation-tokens.js` — the seam between the identities this application speaks and the tokens the

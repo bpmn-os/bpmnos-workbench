@@ -3,6 +3,7 @@ import answerable from '../answerable.js';
 import createArchiveToggle from '../archive-toggle.js';
 import renderFrozenValues from '../frozen-values.js';
 import addFilter from '../panel-filter.js';
+import replayed from '../replayed.js';
 import createMessageEntry from './MessageEntry.js';
 
 // Font Awesome 6 free, solid: paper-plane offers the delivery, hourglass says it is with the engine.
@@ -38,6 +39,13 @@ export default function MessagesPanel(injector, eventBus, messages, config) {
   // A delivery is the reader's only where the run asks them for one, which is a manual run and nothing else.
   this._answerable = answerable(eventBus, () => this._render());
 
+  // A replayed log is a record: it lists what the run finished with, and the controls that ask something of
+  // a run in progress are not offered over it.
+  this._replayed = replayed(eventBus, () => {
+    this._syncControls();
+    this._render();
+  });
+
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('messages.changed', () => this._render());
   eventBus.on('mode.changed', () => this._applyNote());
@@ -60,6 +68,17 @@ export default function MessagesPanel(injector, eventBus, messages, config) {
  * that draws them for every panel, each carrying the offer to deliver this message to that token.
  */
 MessagesPanel.prototype._candidates = function(message) {
+
+  // A replayed log lists the message from the moment it was sent and says nothing of who might take it:
+  // which tokens may is the recipient header an engine evaluated as the request was made, and the delivery
+  // was settled long ago. `null` rather than none — the row has nothing to say here, which is not the same
+  // as saying that no token may take it, and the section is left out rather than filled with a denial. It
+  // is answered before anything is asked of the host, the answer being about the run and not about what
+  // services are to hand. A message the run finished with still names the token that took it.
+  if (this._replayed() && !message.archived) {
+    return null;
+  }
+
   const tokenRows = this._injector.get('tokenRows', false);
 
   if (!tokenRows) {
@@ -219,18 +238,44 @@ MessagesPanel.prototype._init = function() {
   this._body = body;
 
   // What the tab shows of what the run has finished with, at its foot, as the other tabs of a run show it.
-  footer.appendChild(createArchiveToggle(
+  this._archiveToggle = createArchiveToggle(
     'the messages',
-    () => this._showArchived,
+    () => this._archiveShown(),
     (on) => {
       this._showArchived = on;
       this._render();
     }
-  ).element);
+  );
+
+  footer.appendChild(this._archiveToggle.element);
 
   this._build();
+  this._syncControls();
   this._render();
   this._applyNote();
+};
+
+/**
+ * Whether the archive is listed, which in a replayed log is not the reader's to say: such a run is read
+ * whole rather than followed, so the setting is fixed on and what it was left at elsewhere is ignored.
+ */
+MessagesPanel.prototype._archiveShown = function() {
+  return this._replayed() || this._showArchived;
+};
+
+/** The controls of the tab, as the source they belong to allows: what may be set, and what may be asked. */
+MessagesPanel.prototype._syncControls = function() {
+  const record = this._replayed();
+
+  if (this._archiveToggle) {
+    this._archiveToggle.refresh();
+    this._archiveToggle.setFixed(record);
+  }
+
+  if (this._filterControl) {
+    this._filterControl.setFixed(record);
+    this._filter = 'all'; // a fixed filter states what the tab lists, so it narrows nothing
+  }
 };
 
 /**
@@ -259,7 +304,7 @@ MessagesPanel.prototype._build = function() {
 
   // The filter selects by the same relation the rows offer: a message is shown when one of the tokens that
   // may receive it is a token the reader has selected.
-  addFilter(heading, {
+  this._filterControl = addFilter(heading, {
     name: 'wb-message-filter',
     onChange: (value) => {
       this._filter = value;
@@ -306,7 +351,8 @@ MessagesPanel.prototype._render = function() {
 
   // A message the run has finished with is held whether or not it is listed, so what is dropped here is
   // dropped from the showing alone; the count says how much is shown, which is what the reader is looking at.
-  const held = this._messages.all().filter((message) => this._showArchived || !message.archived),
+  //
+  const held = this._messages.all().filter((message) => this._archiveShown() || !message.archived),
         messages = this._filter === 'selected'
           ? held.filter((message) => this._forSelected(message))
           : held;

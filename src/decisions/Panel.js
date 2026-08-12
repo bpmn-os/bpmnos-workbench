@@ -4,6 +4,7 @@ import answerable from '../answerable.js';
 import createArchiveToggle from '../archive-toggle.js';
 import renderFrozenValues from '../frozen-values.js';
 import addFilter from '../panel-filter.js';
+import replayed from '../replayed.js';
 import { selectionFor } from '../token-rows/select.js';
 import createDecisionEntry, { createChoiceRow } from './DecisionEntry.js';
 
@@ -40,6 +41,13 @@ export default function DecisionsPanel(injector, eventBus, decisions, config) {
   // A choice is the reader's only where the run asks them for one, which is a manual run and nothing else.
   this._answerable = answerable(eventBus, () => this._render());
 
+  // A replayed log is a record: it lists the decisions that were answered and not the ones a run is
+  // standing at, since what a pending choice may take is a question for an engine that is not there.
+  this._replayed = replayed(eventBus, () => {
+    this._syncControls();
+    this._render();
+  });
+
   eventBus.on('diagram.init', () => this._init());
   eventBus.on('decisions.changed', () => this._render());
   eventBus.on('mode.changed', () => this._applyNote());
@@ -71,18 +79,44 @@ DecisionsPanel.prototype._init = function() {
   this._body = body;
 
   // What the tab shows of what the run has finished with, at its foot, as the other tabs of a run show it.
-  footer.appendChild(createArchiveToggle(
+  this._archiveToggle = createArchiveToggle(
     'the decisions, with the values that were chosen',
-    () => this._showArchived,
+    () => this._archiveShown(),
     (on) => {
       this._showArchived = on;
       this._render();
     }
-  ).element);
+  );
+
+  footer.appendChild(this._archiveToggle.element);
 
   this._build();
+  this._syncControls();
   this._render();
   this._applyNote();
+};
+
+/**
+ * Whether the archive is listed, which in a replayed log is not the reader's to say: such a run is read
+ * whole rather than followed, so the setting is fixed on and what it was left at elsewhere is ignored.
+ */
+DecisionsPanel.prototype._archiveShown = function() {
+  return this._replayed() || this._showArchived;
+};
+
+/** The controls of the tab, as the source they belong to allows: what may be set, and what may be asked. */
+DecisionsPanel.prototype._syncControls = function() {
+  const record = this._replayed();
+
+  if (this._archiveToggle) {
+    this._archiveToggle.refresh();
+    this._archiveToggle.setFixed(record);
+  }
+
+  if (this._filterControl) {
+    this._filterControl.setFixed(record);
+    this._filter = 'all'; // a fixed filter states what the tab lists, so it narrows nothing
+  }
 };
 
 /**
@@ -105,7 +139,7 @@ DecisionsPanel.prototype._build = function() {
   name.className = 'bjs-tab-name';
   name.textContent = this._config.label || 'Decisions';   // the band names the tab
 
-  addFilter(heading, {
+  this._filterControl = addFilter(heading, {
     name: 'wb-decision-filter',
     onChange: (value) => {
       this._filter = value;
@@ -259,7 +293,7 @@ DecisionsPanel.prototype._render = function() {
 
   // A decision the run has answered is held whether or not it is listed, so what is dropped here is dropped
   // from the showing alone.
-  const held = this._decisions.all().filter((decision) => this._showArchived || !decision.archived),
+  const held = this._decisions.all().filter((decision) => this._archiveShown() || !decision.archived),
         selected = this._selected(),
         shown = this._filter === 'selected'
           ? held.filter((decision) => selected.has(decision.key))
@@ -333,7 +367,14 @@ DecisionsPanel.prototype._body_ = function(decision) {
   const choices = document.createElement('div');
 
   choices.className = 'wb-choices';
-  choices.appendChild(title(decision.choices.length ? 'Choices' : 'No choices'));
+
+  // A replayed log opens a decision the moment its token stands busy at the task, and has nothing to say of
+  // its choices until the record of what was decided names them: a choice states its attribute inside the
+  // condition it is written as, which only the engine parses. So the task is listed as waiting, and saying
+  // that it has no choices would be saying something the log does not say.
+  if (decision.choices.length || !this._replayed() || decision.archived) {
+    choices.appendChild(title(decision.choices.length ? 'Choices' : 'No choices'));
+  }
 
   decision.choices.forEach((choice, index) => {
     choices.appendChild(createChoiceRow(choice, (value) => {

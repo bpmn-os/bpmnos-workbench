@@ -59,7 +59,13 @@ export default function createMessageEntry(message, options = {}) {
   section(entry.contentEl, 'Header', omit(message.header, SHOWN_IN_SUMMARY));
   section(entry.contentEl, 'Content', message.content);
 
-  recipients(entry.contentEl, options.recipients || [], options.archived ? archivedTitle(message) : undefined);
+  // `null` is not the same as none: none is a message nobody may take, which the section says, and null is a
+  // row with nothing to say about who may take it — a replayed log, where the answer is the engine's and
+  // arrives only with the record of the delivery. Then the section is left out rather than filled with a
+  // denial.
+  if (options.recipients !== null) {
+    recipients(entry.contentEl, options.recipients || [], options.archived ? archivedTitle(message) : undefined);
+  }
 
   return entry;
 }
@@ -77,6 +83,8 @@ function archivedTitle(message) {
  * The tokens that may receive the message, in the order the engine gave them, under a title and nothing
  * else: which tokens these are is what the row is there to decide, so there is nothing to fold away and no
  * caret to leave room for. The title says whether there are any, in the words the panel says it in.
+ *
+ * A caller with nothing to say of them says so by passing `null`, and this is not drawn at all.
  */
 function recipients(parent, rows, title) {
   const section = el('div', 'wb-message-tokens');

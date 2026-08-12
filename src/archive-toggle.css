@@ -30,3 +30,10 @@
 .wb-archive-toggle:has(input:not(:checked)) {
   color: var(--bjs-grey-30, hsl(225, 10%, 30%));
 }
+
+/* A replayed log is read whole, so the control states that and takes no press. It is faded as the filter
+   beside it is, the two being one thing said twice: this tab shows what it holds. */
+.wb-archive-toggle-fixed {
+  cursor: default;
+  opacity: 0.5;
+}

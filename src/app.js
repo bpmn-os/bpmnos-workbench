@@ -10,6 +10,7 @@ import 'bpmn-js-toolbar/assets/toolbar.css';
 import 'bpmnos-js/bpmnos.css';        // the decision-task and execution-data-box icons
 import './execution-state/execution-state.css'; // the token entry's status/data/globals body
 import './archive-toggle.css';                  // what a tab keeps of what the run has finished with
+import './panel-filter.css';                    // and which of what it keeps a heading narrows to
 import './messages/messages.css';               // the offer to deliver a message to a waiting token
 import './sequences/sequences.css';             // the divider of a performer's list
 import './decisions/decisions.css';             // the controls a choice is made with
