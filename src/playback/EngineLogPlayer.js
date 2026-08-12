@@ -58,7 +58,7 @@ function isMultiInstanceNode(element) {
   return !!(lc && lc.$type === 'bpmn:MultiInstanceLoopCharacteristics');
 }
 
-export default function EngineLogPlayer(eventBus, animation, primitives, elementRegistry, canvasDisplay, injector) {
+export default function EngineLogPlayer(eventBus, animation, primitives, elementRegistry, injector) {
   this._eventBus = eventBus;
   this._animation = animation;
   this._primitives = primitives;
@@ -82,9 +82,11 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   // What a token declares, which the archive reads to freeze a token's values as it leaves.
   this._executionData = injector.get('executionData', false);
 
-  // The canvas display (clock and objective), which is driven by the playback as it progresses. A token
-  // record's globals now carry the objective maintained by the engine.
-  this._display = canvasDisplay || null;
+  // The canvas display, which the player writes the objective of every record it draws into. It is not a
+  // module of the diagram but something the application makes once the modeller stands, so it is handed over
+  // through `setDisplay` rather than injected, and a host that has none — a test, the demo page — is served
+  // by a player that writes to nothing.
+  this._display = null;
 
   this._log = null;
   this._state = 'idle'; // 'idle' | 'playing' | 'paused'
@@ -105,7 +107,12 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   });
 }
 
-EngineLogPlayer.$inject = [ 'eventBus', 'animation', 'primitives', 'elementRegistry', 'canvasDisplay', 'injector' ];
+EngineLogPlayer.$inject = [ 'eventBus', 'animation', 'primitives', 'elementRegistry', 'injector' ];
+
+/** Give the player the canvas display to write the objective of what it draws into. */
+EngineLogPlayer.prototype.setDisplay = function(display) {
+  this._display = display || null;
+};
 
 // --- log + transport ---------------------------------------------------------
 
@@ -717,10 +724,16 @@ EngineLogPlayer.prototype._apply = function(record) {
   }
   this._applySequence(record);
 
-  // The objective is maintained by the engine as globals[0], present in every token record from the new
-  // engine. Playback can now show the objective chip alongside live runs.
-  if (this._display && record.globals && record.globals.length > 0) {
-    this._display.setObjective(record.globals[0]);
+  // The objective the run had accumulated when the record was written, which every token record carries, so
+  // a replayed log reads it as a live run does. It is the first global and is read as such: the engine
+  // requires the global whose id is `Objective` to stand at index zero and writes the globals in that order,
+  // whereas the key each is written under is the attribute's name, which is for display and says nothing.
+  if (this._display && record.globals) {
+    const objective = Object.values(record.globals)[0];
+
+    if (typeof objective === 'number') {
+      this._display.setObjective(objective);
+    }
   }
 
   // A token waiting for a message stops waiting the moment it reports anything past that waiting, whether

@@ -244,9 +244,13 @@ Key source (this repo):
   drawn, one event being taken per announcement, so the engine stands at most one event ahead of the canvas
   and the two readings say the same moment.
 
-  The objective is not drawn in playback at all. A log is the engine's own records and carries no objective,
-  neither per record nor at the end, so a reading there would say the run had none rather than that a log
-  does not carry one. Which way it is read is the reader's and not the run's: `SystemState::getObjective`
+  A replayed log reads the objective the same way, the engine now maintaining it as the first global, so
+  every token record carries what the run had accumulated when it was written and the player writes it as it
+  draws that record. The display is not a module of the diagram but something the application makes once the
+  modeller stands, which is after the playback service is instantiated, so it is handed to the player through
+  `setDisplay` as it is handed to the live run, rather than declared among what either is injected with. A
+  host that has none — a test, the demo page — is served by a player that writes to nothing. Which way the
+  value is read is the reader's and not the run's: `SystemState::getObjective`
   accumulates assuming maximisation, which is the model's semantics, so `trending-up` shows the value as the
   engine holds it and `trending-down` shows the same run written as a minimisation, the value multiplied by
   minus one, and clicking the icon says nothing to the engine.

@@ -248,9 +248,10 @@ modeler.on('mode.changed', ({ mode }) => {
 // accumulated.
 const display = createCanvasDisplay(modeler);
 
-// Register the canvas display in the DI container so the playback module can inject it to show the
-// objective during playback (it is now maintained in globals by the engine).
-modeler.get('injector').set('canvasDisplay', display);
+// The player writes the objective of every record it draws, the engine maintaining it as the first global,
+// so it is handed the display as the live run is. It is handed over rather than injected because the display
+// is made here, after the modeller stands and therefore after the playback service was instantiated.
+modeler.get('playback').setDisplay(display);
 
 // The run the engine performs, in either mode. Greedy and manual are one run differing in which of the
 // controller's dispatchers answer, so one module owns the session and the mode toggle turns it over.

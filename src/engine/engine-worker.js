@@ -111,7 +111,7 @@ function report(extra) {
     entries,
     alive: session.engine.isAlive(),
     time: session.engine.getCurrentTime(),
-    objective: session.engine.getWeightedObjective(),
+    objective: session.engine.getObjective(),
     ...extra
   });
 }
@@ -186,7 +186,7 @@ self.onmessage = async (event) => {
         log,
         seed,
         time: engine.getCurrentTime(),
-        objective: engine.getWeightedObjective(),
+        objective: engine.getObjective(),
         count: log.length,
         engineMs
       };
