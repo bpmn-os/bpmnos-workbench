@@ -23,10 +23,10 @@ if (typeof FontFace !== 'undefined' && document.fonts) {
  * What a run has reached, shown on the canvas: the readings a run has that belong to no token.
  *
  * There are two. The clock is the simulated time the player has drawn, and, where the reader advances time,
- * the control that advances it. The objective is what the run has accumulated, which only a running engine
- * has and a replayed log does not. They stand one above the other at the top right, in one appearance, and
- * they are shown, aligned and blanked together: each is a reading of the same run, so nothing about when a
- * run begins, ends or is refreshed belongs to either of them.
+ * the control that advances it. The objective is what the run has accumulated, visible in all run modes
+ * (greedy, manual, playback) since the engine now maintains it as a global. They stand one above the other
+ * at the top right, in one appearance, and they are shown, aligned and blanked together: each is a reading
+ * of the same run, so nothing about when a run begins, ends or is refreshed belongs to either of them.
  *
  * What a reading means is the reading's own: the clock takes a tick and wears the pulse while the engine
  * waits for one, and the objective says which way it is read. Neither knows of the other.

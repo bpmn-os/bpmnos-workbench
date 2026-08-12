@@ -3,12 +3,12 @@ import { domify } from 'min-dom';
 import format from './format.js';
 
 /**
- * What the run has accumulated: the total weighted objective the engine holds, written beneath the clock.
+ * What the run has accumulated: the objective the engine maintains as a global, written beneath the clock.
  *
  * It is the engine's own value and is written after each advance, the run being paced by what has been
- * drawn, so the number stands for the state the clock beside it shows. A replayed log carries no objective —
- * a record of a run says what its tokens did and not what it was worth — so the reading is absent in
- * playback rather than shown empty.
+ * drawn, so the number stands for the state the clock beside it shows. The objective is maintained in
+ * `globals[Index::Objective]` by the engine and is therefore present in every token record of a log
+ * from the new engine.
  *
  * The engine accumulates its objective assuming maximisation, which is the model's semantics and not a
  * setting. What the icon offers is therefore how the reader reads the number: `trending-up`, which is the
@@ -46,11 +46,10 @@ export default function createObjective(modeler, parent) {
     draw();
   }
 
-  // Shown where a run produces an objective, which greedy and manual do and playback does not. It is not
-  // drawn at all there rather than drawn empty: a blank reading would say the run had none, where the truth
-  // is that a log does not carry one.
+  // Shown where a run is active (greedy, manual, or playback). The objective is now maintained by the
+  // engine in globals, so logs carry it in every token record.
   function setSource(source) {
-    el.hidden = !(source === 'greedy' || source === 'manual');
+    el.hidden = !(source === 'greedy' || source === 'manual' || source === 'playback');
   }
 
   senseEl.addEventListener('click', () => {

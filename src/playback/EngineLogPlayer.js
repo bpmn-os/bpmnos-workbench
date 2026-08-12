@@ -58,7 +58,7 @@ function isMultiInstanceNode(element) {
   return !!(lc && lc.$type === 'bpmn:MultiInstanceLoopCharacteristics');
 }
 
-export default function EngineLogPlayer(eventBus, animation, primitives, elementRegistry, injector) {
+export default function EngineLogPlayer(eventBus, animation, primitives, elementRegistry, canvasDisplay, injector) {
   this._eventBus = eventBus;
   this._animation = animation;
   this._primitives = primitives;
@@ -82,6 +82,10 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   // What a token declares, which the archive reads to freeze a token's values as it leaves.
   this._executionData = injector.get('executionData', false);
 
+  // The canvas display (clock and objective), which is driven by the playback as it progresses. A token
+  // record's globals now carry the objective maintained by the engine.
+  this._display = canvasDisplay || null;
+
   this._log = null;
   this._state = 'idle'; // 'idle' | 'playing' | 'paused'
   this._paused = false;
@@ -101,7 +105,7 @@ export default function EngineLogPlayer(eventBus, animation, primitives, element
   });
 }
 
-EngineLogPlayer.$inject = [ 'eventBus', 'animation', 'primitives', 'elementRegistry', 'injector' ];
+EngineLogPlayer.$inject = [ 'eventBus', 'animation', 'primitives', 'elementRegistry', 'canvasDisplay', 'injector' ];
 
 // --- log + transport ---------------------------------------------------------
 
@@ -259,6 +263,9 @@ EngineLogPlayer.prototype.play = async function(log) {
   // the run states its own starting instant: its stream opens with the clock tick that begins it, so the
   // clock reads nothing until that record is applied rather than assuming a run begins at zero
   this._time = null;
+  if (this._display) {
+    this._display.setObjective(null);
+  }
   this._animation.clear();
   this._setState('playing'); // fires playback.changed → the clock reads as unknown until the first tick
 
@@ -709,6 +716,12 @@ EngineLogPlayer.prototype._apply = function(record) {
     this._executionState.apply(record);
   }
   this._applySequence(record);
+
+  // The objective is maintained by the engine as globals[0], present in every token record from the new
+  // engine. Playback can now show the objective chip alongside live runs.
+  if (this._display && record.globals && record.globals.length > 0) {
+    this._display.setObjective(record.globals[0]);
+  }
 
   // A token waiting for a message stops waiting the moment it reports anything past that waiting, whether
   // it received what it waited for or left without it. The engine withdraws the request and says nothing,
