@@ -26,6 +26,11 @@ import SidePanelModule from 'bpmn-js-side-panel';
 // reference would refer to nothing and the globals it declares would have nowhere to live.
 import DataStoreModule from 'bpmn-js-datastore';
 
+// The event sub-process, which plain bpmn-js offers nowhere: a palette entry that creates one, and a popup
+// menu entry that collapses or expands it. `bpmnos-js` offers both and so does this.
+import CollapseEventSubProcessModule from 'bpmn-js-collapse-event-subprocess';
+import EventSubProcessPaletteModule from 'bpmn-js-collapse-event-subprocess/palette';
+
 import LintModule from 'bpmn-js-bpmnlint';
 import getRules from 'bpmnos-js/rules';           // the authoritative BPMN-OS rule set (essentials + engine/* + bpmnos/*)
 import IssuesPanelModule from 'bpmn-workbench/issues'; // self-registering "Issues" side-panel tab
@@ -157,6 +162,8 @@ const modeler = new BpmnModeler({
     ExecutionDataModule, // → `executionData`: what each element declares and inherits (not in the full module)
     AnnotationModule,    // → the on-canvas execution data box, opened from the context pad's lightbulb
     ContextPadCompatModule,
+    CollapseEventSubProcessModule, // → collapse/expand an event sub-process, from the popup menu
+    EventSubProcessPaletteModule,  // → create one, from the palette
     SidePanelModule,
     LintModule,
     IssuesPanelModule,
