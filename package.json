@@ -42,7 +42,7 @@
     "bpmn-workbench": "github:bpmn-os/bpmn-workbench#5a8eda2",
     "bpmnlint": "^10.3.0",
     "bpmnlint-utils": "^1.1.1",
-    "bpmnos-js": "github:bpmn-os/bpmnos-js#1970ffa",
+    "bpmnos-js": "github:bpmn-os/bpmnos-js#e0ee1a9",
     "diagram-js": "^15.18.0",
     "dseg": "^0.46.0",
     "inherits": "^2.0.4",
