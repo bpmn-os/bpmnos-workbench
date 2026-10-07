@@ -108,11 +108,22 @@ MessagesPanel.prototype._candidates = function(message) {
   const recipients = this._shown(this._messages.recipients ? this._messages.recipients(message.key) : []);
 
   // A run that delivers for itself is offered nothing: the row says which tokens may receive the message
-  // and asks nothing of the reader.
-  return recipients.map((recipient) =>
-    tokenRows.create(asked(message.key, recipient), recipient, {
-      control: this._answerable() ? this._offer(message, recipient) : null
-    }).element);
+  // and asks nothing of the reader. A row is made once and kept, and a run turns over between greedy and
+  // manual while its rows stand, so the offer is mounted here on every drawing rather than given at the
+  // row's making.
+  return recipients.map((recipient) => {
+    const row = tokenRows.create(asked(message.key, recipient), recipient);
+
+    if (row.controlsEl) {
+      row.controlsEl.innerHTML = '';
+
+      if (this._answerable()) {
+        row.controlsEl.appendChild(this._offer(message, recipient));
+      }
+    }
+
+    return row.element;
+  });
 };
 
 /** The offer to forget one archived message, which is the only message a reader may take away. */
