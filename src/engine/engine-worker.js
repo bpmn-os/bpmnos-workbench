@@ -1,18 +1,20 @@
 // The engine worker, serving both a greedy run and a manual one.
 //
-// `Engine.run` is a single blocking call, so the BPMN-OS wasm engine runs here in a Web Worker rather
-// than on the page. It assembles an Input in three steps so the page can prompt for a model's lookup
+// A run of the BPMN-OS wasm engine continues until it is terminated, so it runs here in a Web Worker rather
+// than on the page; `run`, `resume` and `advance` return promises, the run being suspended while the engine
+// waits. It assembles an Input in three steps so the page can prompt for a model's lookup
 // tables before running: parse a model and report the lookup tables it references (`loadModel` →
 // `lookups`), accept each lookup table's CSV (`lookup`), and — once the instance CSV is supplied — build
 // an Engine and run it (`run` → `done`). The seed comes from the caller (the page owns it, so a re-run can
 // be reproducible and "Refresh" can re-roll it); a given seed → a fixed stochastic sample. The whole run's
-// monitor entries arrive in one synchronous burst inside `run`, so we collect them here and hand the page
-// the complete log in the `done` message.
+// monitor entries arrive while `run` proceeds, so we collect them here and hand the page the complete log in
+// the `done` message.
 //
-// What a run decides for itself is which of its controller's dispatchers answer, rather than a mode of the
-// engine. Both modes are therefore one composition: a greedy run lets every dispatcher of it speak, and a
-// manual run silences the two that decide and the clock, so that what the reader is to be asked about
-// reaches the page and time advances only when the reader says so.
+// What a run decides for itself is which of its controller's dispatchers answer and whether the engine
+// advances time, rather than a mode of the engine. Both modes are therefore one composition and one data
+// provider holding time: a greedy run lets every dispatcher of it speak and the engine advance time whenever
+// it waits, and a manual run silences the two that decide and holds time, so that what the reader is to be
+// asked about reaches the page and time advances only when the reader says so.
 
 import createBPMNOS from '@bpmn-os/bpmnos-wasm';
 
@@ -24,22 +26,25 @@ import createBPMNOS from '@bpmn-os/bpmnos-wasm';
 // everything behind it is what the run settles for itself: ahead of the deciders, a termination ends the run
 // when it is given rather than at the first fetch where none of them has anything to say, and what the
 // reader answers is dispatched before anything automatic settles something else. It costs nothing at the
-// fetches where it is empty. `TimeWarp` is last because a clock answers every fetch, so nothing behind it
-// would ever be reached.
+// fetches where it is empty. No dispatcher advances time.
 const COMPOSITION = [
   'EnqueuedEvents',
   'FirstFeasibleExit', 'FirstFeasibleEntry', 'InstantDirectMessage',
-  'FirstEnumeratedChoice', 'CompetingCandidates', 'TimeWarp'
+  'FirstEnumeratedChoice', 'CompetingCandidates'
 ];
 
+// The data provider holds time, so that the engine advances it only where a greedy run lets it and a manual
+// run advances it only by the clock ticks the reader enqueues.
+const PROVIDER = (seed) => JSON.stringify({ provider: 'stochastic', seed, clockTickDuration: 'hold' });
+
 // The dispatchers only a greedy run lets speak: the two that decide, because in a manual run the reader
-// decides, and the clock, because the reader ticks it and the engine is to stand still until they do.
+// decides.
 // `SequentialEntries` is in neither, the Sequences tab answering the entry of a child of a sequential ad hoc
 // subprocess from the order it holds, and `InstantDirectMessage` speaks in both, an addressed delivery being
 // no decision. Each dispatcher joins this list as its panel arrives.
 //
 // The positions are read from the composition rather than written down, so reordering it moves them too.
-const GREEDY_ONLY = [ 'FirstEnumeratedChoice', 'CompetingCandidates', 'TimeWarp' ]
+const GREEDY_ONLY = [ 'FirstEnumeratedChoice', 'CompetingCandidates' ]
   .map(name => COMPOSITION.indexOf(name));
 
 const ready = createBPMNOS();
@@ -50,10 +55,10 @@ let Module = null;
 let modelXml = null;
 let lookupTables = {};
 
-// A manual run keeps its engine alive between the page's inputs: the engine returns from `run` and from
-// `resume` when it can fetch no further event, the caller queues what is to happen next on the controller,
-// and the next `resume` carries on. The entries the monitor collects in between are handed over with each
-// answer, since the engine notifies synchronously while it runs and nothing can be posted meanwhile.
+// A manual run keeps its engine alive between the page's inputs: the page asks for one round at a time, and
+// a round in which the engine waits, producing no record, is where the run stands until the caller queues
+// what is to happen next on the controller. The entries the monitor collects in between are handed over with
+// each answer.
 let session = null; // { engine, monitor, controller, entries }
 
 // Builds what a session drives: one composition, with what only a greedy run adds silenced where the mode is
@@ -74,8 +79,8 @@ function beginSession(instances, seed, greedy) {
   monitor.addObserver((entryJson) => entries.push(JSON.parse(entryJson)));
 
   // Silencing withholds nothing but dispatching, so what is silent goes on observing and is correct the
-  // moment the mode turns over. A manual run therefore stops wherever it can fetch no event, and time
-  // advances only by what the page queues.
+  // moment the mode turns over. A manual run therefore stands wherever the engine waits, and time advances
+  // only by what the page queues.
   const controller = new Module.Controller(JSON.stringify({ dispatchers: COMPOSITION }));
   if (!greedy) {
     for (const index of GREEDY_ONLY) {
@@ -85,10 +90,29 @@ function beginSession(instances, seed, greedy) {
 
   // the caller owns the seed (Refresh re-rolls it); fall back to a random one if none was supplied
   const chosenSeed = Number.isFinite(seed) ? seed : Math.floor(Math.random() * 0x7fffffff);
-  const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed: chosenSeed }), controller, monitor);
+  const engine = new Module.Engine(input, PROVIDER(chosenSeed), controller, monitor);
   input.delete();
+  if (greedy) {
+    engine.advanceTime(0);
+  }
 
   session = { engine, monitor, controller, entries, seed: chosenSeed };
+}
+
+// One step of a session: one round, or as many as it takes to process an event where the engine advances
+// time, since the round in which the engine enqueues a clock tick processes none. It answers whether an
+// event was processed, which is false once the engine waits for the caller or the run is terminated.
+async function step() {
+  for (;;) {
+    const before = session.entries.length;
+    const continuing = await session.engine.advance();
+    if (session.entries.length > before) {
+      return true;
+    }
+    if (!continuing || !session.engine.isAdvancingTime()) {
+      return false;
+    }
+  }
 }
 
 function endSession() {
@@ -174,11 +198,12 @@ self.onmessage = async (event) => {
       const seed = Number.isFinite(message.seed) ? message.seed : Math.floor(Math.random() * 0x7fffffff);
       // greedy: every dispatcher of the composition speaks, so the run settles everything itself
       const controller = new Module.Controller(JSON.stringify({ dispatchers: COMPOSITION }));
-      const engine = new Module.Engine(input, JSON.stringify({ provider: 'stochastic', seed }), controller, monitor);
+      const engine = new Module.Engine(input, PROVIDER(seed), controller, monitor);
       input.delete();
+      engine.advanceTime(0);
 
       const startedAt = performance.now();
-      engine.run(0); // the deciders settle every decision and TimeWarp advances the clock
+      await engine.run(0); // the deciders settle every decision and the engine advances time
       const engineMs = performance.now() - startedAt;
 
       const done = {
@@ -203,7 +228,10 @@ self.onmessage = async (event) => {
         return;
       }
       beginSession(message.instances, message.seed, false);
-      session.engine.run(0);
+      // the run is carried forward as far as it goes, which is where the engine first waits for the reader
+      session.engine.initialize(0);
+      while (await step()) {
+      }
       report();
       return;
     }
@@ -236,6 +264,12 @@ self.onmessage = async (event) => {
           session.controller.deactivate(index);
         }
       }
+      // A greedy run lets the engine advance time, a manual one holds it, which also turns over at once.
+      if (message.greedy) {
+        session.engine.advanceTime(0);
+      } else {
+        session.engine.holdTime();
+      }
       report();
       return;
     }
@@ -245,8 +279,9 @@ self.onmessage = async (event) => {
         self.postMessage({ type: 'error', error: 'no run to advance' });
         return;
       }
-      // one fetch and the event it returned; `advanced` says whether the run may be asked again
-      const advanced = session.engine.advance();
+      // one event; `advanced` is false once the engine waits for the caller or the run is terminated, which
+      // `alive` tells apart
+      const advanced = await step();
       report({ advanced });
       return;
     }

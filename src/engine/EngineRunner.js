@@ -87,9 +87,9 @@ export default class EngineRunner {
   }
 
   /**
-   * Carry the run forward by one fetched event and answer what it produced. The Step's `advanced` says
-   * whether it may be asked again: false where nothing was fetched, where the run was told to stop, or
-   * where a clock tick left nothing to advance. Asking one event at a time is what keeps the engine from
+   * Carry the run forward by one event and answer what it produced. The Step's `advanced` says whether an
+   * event was processed: false where the engine waits for the reader, the run being alive, or where the run
+   * was terminated. Asking one event at a time is what keeps the engine from
    * running ahead of what the page has drawn, and therefore what lets a mode change land where the reader
    * is looking.
    */
@@ -99,7 +99,7 @@ export default class EngineRunner {
 
   /**
    * Change what the run decides for itself, without starting it over. The mode is which of the
-   * composition's dispatchers speak, so it turns over between fetches; what was silent has gone on
+   * composition's dispatchers speak and whether the engine advances time, so it turns over between fetches; what was silent has gone on
    * observing and answers from an up-to-date set at the very next advance.
    */
   setMode(greedy) {

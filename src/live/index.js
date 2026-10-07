@@ -6,10 +6,11 @@ import walk from '../decisions/walk.js';
 /*
  * createLiveRun — the run the wasm engine performs here, in either mode.
  *
- * Greedy and manual are not two runs but one, differing in which of the controller's dispatchers answer.
- * Greedy lets every one of them speak, so the run settles each decision and advances its own clock; manual
- * silences the deciders and the clock, so the engine goes as far as it can on its own and then stands still
- * until the reader supplies what it is waiting for.
+ * Greedy and manual are not two runs but one, differing in which of the controller's dispatchers answer and
+ * whether the engine advances time. Greedy lets every one of them speak and the engine advance time, so the
+ * run settles each decision and advances its own clock; manual silences the deciders and holds time, so the
+ * engine goes as far as it can on its own and then stands still until the reader supplies what it is waiting
+ * for.
  *
  * A run is therefore one session, made of steps. A step brings a requested mode change into effect and then
  * advances the engine by one fetched event, so everything that reaches the engine goes through one path: a

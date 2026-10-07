@@ -60,9 +60,10 @@ tab's "Load log". `src/examples/earliest-arrival.{bpmn,-log.json}` (the EAP inst
 `BPMNOSInstances.jl`) is a loadable sample, not auto-loaded, and the tests play that very log. Playback
 replays a recorded `-log.json`; greedy and manual simulation are one live run of the wasm engine
 (`src/live/`, through `src/engine/` and `src/input/`), differing in which of the controller's dispatchers
-answer, so the mode turns over without the run beginning again. Greedy lets every dispatcher speak, so the
-run settles each decision and advances its own clock. Manual silences the deciders and the clock, so the
-engine goes as far as it can and then stands still, the clock of the canvas display pulses once the diagram
+answer and whether the engine advances time, so the mode turns over without the run beginning again. The
+data provider holds time. Greedy lets every dispatcher speak and the engine advance time, so the run settles
+each decision and advances its own clock. Manual silences the deciders and holds time, so the engine goes as
+far as it can and then stands still, the clock of the canvas display pulses once the diagram
 has caught up, and a click on it enqueues a clock tick that lets the engine carry on. What a run produces is played as it
 arrives rather than after the run. The decisions a user makes — a message delivery, a choice, a sequential
 entry — reach the engine through the same call and need no protocol of their own.
