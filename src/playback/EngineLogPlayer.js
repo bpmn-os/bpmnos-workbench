@@ -313,6 +313,8 @@ EngineLogPlayer.prototype.play = async function(log) {
           index += Math.max(flows.length - 1, 0);
         } else if (entry.event) {
           await this._applyEvent(entry.event);
+        } else if (entry.objective) {
+          this._applyObjective(entry.objective);
         } else if (entry.message) {
           this._applyMessage(entry.message);
         } else if (entry.messageDeliveryRequest) {
@@ -729,18 +731,6 @@ EngineLogPlayer.prototype._apply = function(record) {
   }
   this._applySequence(record);
 
-  // The objective the run had accumulated when the record was written, which every token record carries, so
-  // a replayed log reads it as a live run does. It is the first global and is read as such: the engine
-  // requires the global whose id is `Objective` to stand at index zero and writes the globals in that order,
-  // whereas the key each is written under is the attribute's name, which is for display and says nothing.
-  if (this._display && record.globals) {
-    const objective = Object.values(record.globals)[0];
-
-    if (typeof objective === 'number') {
-      this._display.setObjective(objective);
-    }
-  }
-
   // A token waiting for a message stops waiting the moment it reports anything past that waiting, whether
   // it received what it waited for or left without it. The engine withdraws the request and says nothing,
   // so its own record is what says so.
@@ -901,6 +891,15 @@ EngineLogPlayer.prototype._applyDeliveryRequest = function(record) {
 EngineLogPlayer.prototype._applyChoiceRequest = function(record) {
   if (this._decisions) {
     this._decisions.open(record.instanceId, record.nodeId);
+  }
+};
+
+// Apply an objective record: the engine reports every change of the objective it holds, with the value it
+// reached, at the point of the run it happened, so the display shows what the drawn records have reached,
+// whether the records come from a live run or from a log.
+EngineLogPlayer.prototype._applyObjective = function(record) {
+  if (this._display) {
+    this._display.setObjective(record.value);
   }
 };
 

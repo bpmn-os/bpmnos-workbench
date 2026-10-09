@@ -31,9 +31,10 @@
  *   initialize(csv, seed, greedy) → Promise<Step>  begin a run without carrying it forward
  *   advance()                     → Promise<Step>  one fetched event; `advanced` says whether to ask again
  *
- * where Step is `{ entries, alive, time, objective }`. The entries are the records the engine produced,
- * and they are all a page learns of what a run does: the engine's present runs far ahead of the diagram,
- * so what the page shows follows the records it has drawn rather than the state the engine is in. What the
+ * where Step is `{ entries, alive, time }`. The entries are the records the engine produced, among them an
+ * `objective` record for every change of the objective, and they are all a page learns of what a run does:
+ * the engine's present runs far ahead of the diagram, so what the page shows follows the records it has
+ * drawn rather than the state the engine is in. What the
  * model resolves rather than what a run does is asked once, through `describe`.
  */
 export default class EngineRunner {

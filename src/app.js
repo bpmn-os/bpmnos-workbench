@@ -256,8 +256,8 @@ modeler.on('mode.changed', ({ mode }) => {
 // accumulated.
 const display = createCanvasDisplay(modeler);
 
-// The player writes the objective of every record it draws, the engine maintaining it as the first global,
-// so it is handed the display as the live run is. It is handed over rather than injected because the display
+// The player writes the objective of every objective record it draws, which the engine reports whenever the
+// objective changes, so it is handed the display. It is handed over rather than injected because the display
 // is made here, after the modeller stands and therefore after the playback service was instantiated.
 modeler.get('playback').setDisplay(display);
 

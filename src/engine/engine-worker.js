@@ -135,7 +135,6 @@ function report(extra) {
     entries,
     alive: session.engine.isAlive(),
     time: session.engine.getCurrentTime(),
-    objective: session.engine.getObjective(),
     ...extra
   });
 }

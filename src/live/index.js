@@ -25,8 +25,8 @@ import walk from '../decisions/walk.js';
  * that playing, as they govern a recorded log.
  *
  * @param {import('bpmn-js/lib/Modeler').default} modeler
- * @param {{ setWaiting: (boolean) => void, setObjective: (number?) => void }} display  the canvas display:
- *        the clock, which shows that the engine waits for the reader, and the objective the run has reached
+ * @param {{ setWaiting: (boolean) => void }} display  the canvas display, whose clock shows that the engine
+ *        waits for the reader; the objective it shows is written by the player, from the records it draws
  * @returns {{ activate: (mode: string) => void, deactivate: () => void, setMode: (mode: string) => void,
  *            decide: (event: string, payload?: object) => void }}
  */
@@ -241,11 +241,6 @@ export default function createLiveRun(modeler, display) {
         drained = false; // there is something to draw, so the diagram is behind the engine again
       }
       playback.push(advanced.entries);
-
-      // What the run has accumulated, written after every advance. The run is paced by what has been drawn,
-      // one event being taken per announcement, so the engine stands at most one event ahead of the canvas
-      // and the objective and the clock beside it say the same moment.
-      display.setObjective(advanced.objective);
 
       if (!advanced.advanced) {
         if (advanced.alive) {

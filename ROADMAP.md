@@ -21,7 +21,7 @@ state, the messages and the sequences stores. A store written that way cannot ru
 because the record that would advance it has not been read yet.
 
 What a run does therefore reaches the page as records and as nothing else. The worker's step carries the
-records, whether the engine is alive, the time and the objective; `manual.decisions` and the pending
+records, among them a record for every change of the objective, whether the engine is alive and the time; `manual.decisions` and the pending
 decisions it announced are gone. Two things no record says are asked of the bridge instead: what the model
 resolves, through `describeModel`, which reports the sequential performers and the activities each performs;
 and what a token waiting for a message accepts, which a `messageDeliveryRequest` record now carries, since
