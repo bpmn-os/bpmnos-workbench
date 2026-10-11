@@ -100,16 +100,22 @@ function beginSession(instances, seed, greedy) {
 }
 
 // One step of a session: one round, or as many as it takes to process an event where the engine advances
-// time, since the round in which the engine enqueues a clock tick processes none. It answers whether an
-// event was processed, which is false once the engine waits for the caller or the run is terminated.
+// time, since the round in which the engine enqueues a clock tick processes none. It answers whether the
+// run may be advanced again, which is false once the engine waits for the caller or the run is terminated.
+// The round processing the termination records it, and its record goes to the page with the others; that
+// it produced a record does not make the run one to advance again, a further round only processing
+// another termination.
 async function step() {
   for (;;) {
     const before = session.entries.length;
     const continuing = await session.engine.advance();
+    if (!continuing) {
+      return false;
+    }
     if (session.entries.length > before) {
       return true;
     }
-    if (!continuing || !session.engine.isAdvancingTime()) {
+    if (!session.engine.isAdvancingTime()) {
       return false;
     }
   }

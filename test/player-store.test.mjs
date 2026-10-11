@@ -69,11 +69,21 @@ test('nothing is held until the log is played', async () => {
   assert.equal(store.getState('EarliestArrival_Process', 'Instance1'), null);
 });
 
+// The log through the record of the given token at the given state, which is how a test says how far a run
+// has gone, the position of a record depending on how many records the engine reports before it.
+function through(log, nodeId, state) {
+  const index = log.findIndex((entry) => entry.token && entry.token.nodeId === nodeId && entry.token.state === state);
+
+  assert.ok(index >= 0, `the log carries ${nodeId} ${state}`);
+
+  return log.slice(0, index + 1);
+}
+
 test('the store holds what the record just replayed carried, and nothing later', async () => {
   const { player, store, log, read } = await replay();
 
-  // through the third token record, which is the child token entering at the start event
-  await player.play(log.slice(0, 3));
+  // through the child token entering at the start event
+  await player.play(through(log, 'StartEvent_1', 'ENTERED'));
 
   assert.equal(store.getState('StartEvent_1', 'Instance1'), 'ENTERED');
   assert.equal(read('StartEvent_1', 'Instance1', CURRENT_LOCATION), 'Origin',
@@ -86,7 +96,7 @@ test('a token that hops is held under the node it now rests at', async () => {
   const { player, log, read } = await replay();
 
   // through the arrival of that token at the sub-process, which the departure before it animated
-  await player.play(log.slice(0, 5));
+  await player.play(through(log, 'LoopActivity', 'ARRIVED'));
 
   assert.equal(read('LoopActivity', 'Instance1', CURRENT_LOCATION), 'Origin',
     'the hop carried what the token held to the node it arrived at');
@@ -114,7 +124,7 @@ test('the parentage the player hands the animation is the one the store records'
 
   // through the two births, and no further: a token that has since hopped is held under the node it
   // hopped to, so the keys of the birth calls would no longer be the store's
-  await player.play(log.slice(0, 3));
+  await player.play(through(log, 'StartEvent_1', 'ENTERED'));
 
   const births = animation.calls.filter((call) => call.call === 'createToken');
 

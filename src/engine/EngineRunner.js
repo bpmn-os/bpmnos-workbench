@@ -88,9 +88,9 @@ export default class EngineRunner {
   }
 
   /**
-   * Carry the run forward by one event and answer what it produced. The Step's `advanced` says whether an
-   * event was processed: false where the engine waits for the reader, the run being alive, or where the run
-   * was terminated. Asking one event at a time is what keeps the engine from
+   * Carry the run forward by one event and answer what it produced. The Step's `advanced` says whether the
+   * run may be advanced again: false where the engine waits for the reader, the run being alive, or where
+   * the run was terminated, the termination's record being among the entries. Asking one event at a time is what keeps the engine from
    * running ahead of what the page has drawn, and therefore what lets a mode change land where the reader
    * is looking.
    */
