@@ -566,6 +566,32 @@ their summary/content can update live.
   `GuidedEvaluator` reward), not currently exposed by `getPendingDecisions`/`getChoiceCandidates` — a
   future modest bridge addition (per-candidate score). Out of scope for the core work packages.
 
+### R11 · Engine linting — what the engine rejects is reported while modelling
+
+A model is checked by bpmnlint with the rule set of bpmnos-js, which deliberately reads no expression and no
+type: LIMEX expressions and the type grammar are the engine's, and restating them in JavaScript would fall
+behind them. The engine, which the workbench runs as WebAssembly, rejects what a model gets wrong when it builds
+the model: a malformed expression, a name in an expression that is no attribute visible at its node, an object
+or input read as a value, a write to an input, an array-valued lookup outside an assignment to an array, a
+malformed attribute type or input schema, and an objective or weight on an object. Today the workbench learns
+of such an error only when a run is started or described, as the text of a worker error, and nothing builds
+the model while it is edited.
+
+- **Requirement:** whenever the model changes, the workbench builds it through the WebAssembly engine and
+  reports what the engine rejects as an issue on the element concerned, in the Issues panel beside bpmnlint's
+  findings, so that the engine's own grammar and rules are applied while modelling.
+- **Division of the checks:** every check of an expression belongs to engine linting: its syntax, the names it
+  reads, which must be attributes or inputs visible at its node, and how it uses objects and inputs, in
+  restrictions, operators, conditions, choices and parameter values alike. bpmnlint keeps the checks that read
+  no expression: `bpmnos/attribute-undeclared` for the attributes a model names directly, those of message and
+  signal content and a loop's index, and `bpmnos/attribute-redeclared` for attributes declared twice or
+  shadowing an inherited one.
+- **Limits of the engine as it is:** the build stops at the first error, so a build reports one issue; an
+  error names its element only where the engine wraps it with the id of a restriction, operator or choice; and
+  the build reads the content of every input, so that a model whose inputs have no content yet cannot be
+  built. Each of these is a design question for G.1, and removing any of them is an engine change requiring
+  approval.
+
 ## Work packages and tasks
 
 The work is organised into **work packages** (A–G), each broken into small **tasks** (A.1, A.2, …). A task
@@ -781,6 +807,26 @@ on mock candidates, tokens, and values first.
 - **Temporary assumptions:** Optional extension, not a core deliverable.
 - **Details:** Show a fixed tray of stacked envelopes with a "+k" count, coloured by state and deliberately not anchored to message flows or nodes (R4).
 - **Validation:** The tray shows the count of in-flight messages.
+
+### Work package G — model validation by the engine
+
+**G.1 · Engine linting** — *bpmnos-workbench* (+ *bpmnos-wasm*, *bpmn-workbench*)
+- **Goal:** Report what the engine rejects in a model as issues while the model is edited (R11).
+- **Prerequisites:** A.2.
+- **Open decisions:**
+  - How the engine's findings reach the Issues panel: as a source of issues beside bpmnlint's, or by an
+    asynchronous rule, bpmnlint's rules being synchronous.
+  - Whether the bridge offers a check of a model that returns findings rather than throwing, and whether the
+    engine collects every error of a build rather than stopping at the first, which is an engine change.
+  - How a finding is placed on an element where the engine's message names no id.
+  - How a model is checked whose inputs have no content yet: with the contents the user has supplied, or by a
+    build that checks schemas and expressions without reading contents.
+- **Details:** Build the model in the worker whenever it changes, debounced, and turn the engine's rejection
+  into an issue on the element it names, shown in the Issues panel with bpmnlint's findings and cleared when
+  the model builds.
+- **Validation:** An undeclared attribute named in a restriction, an operator, a condition, a choice or a
+  parameter value, a malformed expression, and a malformed attribute type or input schema each appear as an
+  issue on their element while modelling, and disappear once corrected.
 
 ## App files (created by the tasks above)
 
