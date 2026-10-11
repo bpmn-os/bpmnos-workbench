@@ -1,5 +1,7 @@
 import { createCollapsibleEntry } from 'bpmn-js-side-panel';
 
+import { format } from '../execution-state/View.js';
+
 /**
  * One message rendered as a side-panel entry, on the pattern of `bpmn-js-animation`'s token entry and in
  * its classes, so that the two lists are one appearance rather than two that resemble each other.
@@ -117,14 +119,14 @@ function section(parent, label, values) {
   parent.appendChild(entry.element);
 }
 
-/** One line of a name and its value, as a token entry shows an attribute. */
+/** One line of a name and its value, written as a token entry writes an attribute, arrays and objects alike. */
 function line(name, value) {
   const row = el('div', 'wb-attribute'),
         unset = value === null || value === undefined;
 
   row.appendChild(text('span', 'wb-attribute-name', name));
   row.appendChild(text('span', 'wb-attribute-value' + (unset ? ' wb-attribute-null' : ''),
-    unset ? 'undefined' : String(value)));
+    unset ? 'undefined' : format(value)));
 
   return row;
 }

@@ -121,8 +121,8 @@ export default function createLiveRun(modeler, display) {
   // which is the stream's own growing array rather than a copy, so everything pushed later is played by the
   // same run.
   async function begin() {
-    for (const [ name, csv ] of Object.entries(input.getLookups())) {
-      runner.setLookup(name, csv);
+    for (const [ source, content ] of Object.entries(input.getInputContents())) {
+      runner.setInput(source, content);
     }
 
     await describe();

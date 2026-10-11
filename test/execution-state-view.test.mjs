@@ -150,13 +150,14 @@ test('a number that is not whole is shown to two decimal places', async () => {
   const element = document.createElement('div');
 
   document.body.appendChild(element);
-  store.apply(record({ amount: 3.14159, note: 'held' }, { plain_data: [ 1.5, 2, 'Origin' ] }));
+  store.apply(record({ amount: 3.14159, note: 'held' }, { plain_data: [ 1.5, 2, 'Origin', { x: 0.125, y: null } ] }));
   createExecutionStateView(registry, store).render('PlainTask', 'I1', element);
 
   const values = [ ...element.querySelectorAll('.wb-attribute-value') ].map((node) => node.textContent);
 
   assert.equal(values[0], '3.14');
-  assert.equal(values[3], '[1.50, 2, Origin]', 'a collection shows each member as it would read alone');
+  assert.equal(values[3], '[1.50, 2, Origin, { x: 0.13, y: null }]',
+    'an array shows each element, and a value with fields each field, as it would read alone');
 
   store.apply(record({ amount: 12 }, {}));
 

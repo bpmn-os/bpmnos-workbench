@@ -147,7 +147,7 @@ function touches(reads, changed) {
  *
  * A value the store does not hold reads as null, in its own class, and the three ways of not holding one are
  * not distinguished: the reader of a token entry is told the same thing by each. Everything else is shown as
- * the engine reports it, a boolean, a number, a string or a collection, with one liberty taken: a number
+ * the engine reports it, a boolean, a number, a string, an array or a value with fields, with one liberty taken: a number
  * that is not whole is shown to two decimal places. The engine's decimals are a fixed-point type whose
  * arithmetic leaves a long tail of digits that says nothing about the run and would push everything else out
  * of a panel this narrow. A whole number keeps its own form, so a count reads as a count.
@@ -174,13 +174,14 @@ export function format(value) {
     return Number.isInteger(value) ? String(value) : value.toFixed(DECIMALS);
   }
 
-  // a collection is shown as its members, each formatted as it would be on its own
+  // an array is shown as its elements and a value with fields as its fields, each formatted as it would be
+  // on its own, so that a number is shown alike at whatever depth it stands
   if (Array.isArray(value)) {
     return '[' + value.map(format).join(', ') + ']';
   }
 
   if (typeof value === 'object') {
-    return JSON.stringify(value);
+    return '{ ' + Object.entries(value).map(([ field, member ]) => field + ': ' + format(member)).join(', ') + ' }';
   }
 
   return String(value);

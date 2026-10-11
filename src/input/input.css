@@ -14,3 +14,15 @@
 .wb-input-no-source {
   font-style: italic;
 }
+
+/* The content of a matrix or an object, edited as the CSV or the JSON it is read from: a monospaced area as
+   wide as the column and tall enough for a few rows, resized by the reader, above the same footer a table has. */
+.wb-input-text-area {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 12em;
+  resize: vertical;
+  font-family: var(--bjs-font-family-monospace, monospace);
+  font-size: 12px;
+  white-space: pre;
+}

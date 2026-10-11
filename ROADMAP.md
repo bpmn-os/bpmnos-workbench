@@ -124,8 +124,9 @@ each when done). Structured values cross as **JSON strings**; scalars/ids/CSV cr
 numbers/strings.
 
 - **Input** (assembles one run's inputs; consumed when the Engine is built — one Input → one Engine):
-  `new Input(bpmnXml)`; `getLookupTableNames()` → JSON array of the referenced lookup source names;
-  `addLookupTable(name, csv)`; `setInstance(csv)`. *(Model/instances/lookups go through `Input`.)*
+  `new Input(bpmnXml)`; `getInputSources()` → JSON array of the sources of the inputs the model declares,
+  lookup tables, matrices and objects; `addInputContent(source, content)`, CSV for a lookup or a matrix and
+  JSON for an object; `setInstance(csv)`. *(Model/instances/inputs go through `Input`.)*
 - **Engine:** `new Engine(input, configJson, monitor, controller|null)` — `configJson` =
   `{provider:"static"|"expected"|"dynamic"|"stochastic", seed?}`; **null controller ⇒ autonomous greedy
   run** (playback source). `run(scenarioId)` (draw scenario + run from start; repeatable — a stochastic
@@ -147,7 +148,9 @@ numbers/strings.
   - `getChoiceCandidates(instanceId, nodeId)` → per choice `{attribute, enumeration:[…]}` **or**
     `{attribute, lowerBound, upperBound, multipleOf?}`.
   - `getMessageCandidates(instanceId, nodeId)` → `[{origin, sender, message:{…}}]`.
-  - `enqueueEntryDecision(json)` / `enqueueExitDecision(json)` — `{instanceId, nodeId, status?}`;
+  - `enqueueEntryDecision(json)` / `enqueueExitDecision(json)` — `{instanceId, nodeId, status?}`, the
+    status in the shape a token record renders it, keyed by attribute name with arrays and objects as JSON,
+    an attribute it does not name keeping its value;
     `enqueueChoiceDecision(json)` — `{instanceId, nodeId, choices:[…]}`;
     `enqueueMessageDeliveryDecision(json)` — `{instanceId, nodeId, origin, sender}`;
     `enqueueClockTickEvent()`; `enqueueTerminationEvent()`. Each `enqueue…` → `{queued:true}` /
@@ -682,7 +685,7 @@ on mock candidates, tokens, and values first.
 - **Status:** Done (as a collapsible **Input** entry in the Tokens tab; lookup pickers labelled by each table's `source` filename; provider fixed to stochastic; fresh random seed per run, re-rolled by the footer Refresh).
 - **Prerequisites:** A.1, A.2.
 - **Temporary assumptions:** Replaces A.2's hardcoded inputs; saving a log comes later, in C.5.
-- **Details:** Add an Input tab with a field for the instance CSV, file pickers for exactly the lookup tables the model references (discovered via `getLookupTableNames`), and provider and seed controls, feeding the run in A.2.
+- **Details:** Add an Input tab with a field for the instance CSV, file pickers for exactly the lookup tables the model references (discovered via `getLookupTableNames`), and provider and seed controls, feeding the run in A.2. Since the engine's inputs replaced its lookup tables, the panel offers one field per input the model declares (discovered via `getInputSources`, described by the execution data's `getInputs()`): a grid for a lookup table, its columns the names of its typed header, and a text field for a matrix, as CSV without a header row, and for an object, as JSON, each loadable from a file.
 - **Validation:** Enter instance data and a provider in the panel and see the run use them.
 
 **C.4 · Transport control** — *bpmnos-workbench*

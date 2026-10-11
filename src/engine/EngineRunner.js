@@ -13,8 +13,8 @@
  * about the state the reader is looking at is a question for whoever is driving the run, and `src/live/`
  * answers it there.
  *
- *   loadModel(xml)         → Promise<string[]>  the lookup-table names the model references
- *   setLookup(name,csv)                         supply one lookup table
+ *   loadModel(xml)         → Promise<string[]>  the sources of the inputs the model declares
+ *   setInput(source,content)                    supply the content of one input
  *   run(instanceCsv, seed) → Promise<{ log, seed, time, objective, count }>  one greedy run's token stream
  *                                               (the caller owns the seed, so a re-run can be reproducible)
  *
@@ -56,15 +56,15 @@ export default class EngineRunner {
     return this._request('loadModel', { type: 'loadModel', model: xml });
   }
 
-  setLookup(name, csv) {
-    this._worker.postMessage({ type: 'lookup', name, csv });
+  setInput(source, content) {
+    this._worker.postMessage({ type: 'input', source, content });
   }
 
   /**
    * What the model resolves, which no record says: the sequential performers and the activities each
    * performs. It is asked of the model rather than of a run, so it holds before a run, during one and
-   * while a recorded log is replayed, and it is asked once the lookup tables are in, a model referencing
-   * them being unbuildable without their content.
+   * while a recorded log is replayed, and it is asked once the contents of the inputs are in, a model
+   * declaring inputs being unbuildable without their content.
    */
   describe() {
     return this._request('described', { type: 'describe' });
@@ -183,7 +183,7 @@ export default class EngineRunner {
       return;
     }
 
-    if (msg.type === 'lookups' && this._awaiting('loadModel')) {
+    if (msg.type === 'inputs' && this._awaiting('loadModel')) {
       this._answer((p) => p.resolve(msg.required));
       return;
     }

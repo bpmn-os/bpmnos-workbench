@@ -2,10 +2,10 @@
 //
 // A run of the BPMN-OS wasm engine continues until it is terminated, so it runs here in a Web Worker rather
 // than on the page; `run`, `resume` and `advance` return promises, the run being suspended while the engine
-// waits. It assembles an Input in three steps so the page can prompt for a model's lookup
-// tables before running: parse a model and report the lookup tables it references (`loadModel` →
-// `lookups`), accept each lookup table's CSV (`lookup`), and — once the instance CSV is supplied — build
-// an Engine and run it (`run` → `done`). The seed comes from the caller (the page owns it, so a re-run can
+// waits. It assembles an Input in three steps so the page can prompt for a model's inputs before running:
+// parse a model and report the sources of the inputs it declares (`loadModel` → `inputs`), accept the
+// content of each input, the CSV of a lookup table or a matrix or the JSON of an object (`input`), and —
+// once the instance CSV is supplied — build an Engine and run it (`run` → `done`). The seed comes from the caller (the page owns it, so a re-run can
 // be reproducible and "Refresh" can re-roll it); a given seed → a fixed stochastic sample. The whole run's
 // monitor entries arrive while `run` proceeds, so we collect them here and hand the page the complete log in
 // the `done` message.
@@ -53,7 +53,7 @@ ready.then(() => self.postMessage({ type: 'ready' })).catch(err =>
 
 let Module = null;
 let modelXml = null;
-let lookupTables = {};
+let inputContents = {};
 
 // A manual run keeps its engine alive between the page's inputs: the page asks for one round at a time, and
 // a round in which the engine waits, producing no record, is where the run stands until the caller queues
@@ -69,8 +69,8 @@ function beginSession(instances, seed, greedy) {
   endSession();
 
   const input = new Module.Input(modelXml);
-  for (const [ name, csv ] of Object.entries(lookupTables)) {
-    input.addLookupTable(name, csv);
+  for (const [ source, content ] of Object.entries(inputContents)) {
+    input.addInputContent(source, content);
   }
   input.setInstance(instances);
 
@@ -150,30 +150,30 @@ self.onmessage = async (event) => {
 
   try {
     if (message.type === 'loadModel') {
-      // a new model starts fresh: report exactly the lookup tables it references so the page can prompt
+      // a new model starts fresh: report exactly the sources of the inputs it declares so the page can prompt
       modelXml = message.model;
-      lookupTables = {};
+      inputContents = {};
       const probe = new Module.Input(modelXml);
-      const required = JSON.parse(probe.getLookupTableNames());
+      const required = JSON.parse(probe.getInputSources());
       probe.delete();
-      self.postMessage({ type: 'lookups', required });
+      self.postMessage({ type: 'inputs', required });
       return;
     }
 
     if (message.type === 'describe') {
       // What the model resolves, which the records cannot say: which nodes perform sequentially and which
       // activities each performs. It is asked of the model rather than of a run, so it is the same answer
-      // before a run, during one and while a recorded log is replayed. A model referencing lookup tables
-      // cannot be built without their content, so this is asked once the tables are in.
+      // before a run, during one and while a recorded log is replayed. A model declaring inputs cannot be
+      // built without their content, so this is asked once the contents are in.
       self.postMessage({
         type: 'described',
-        described: JSON.parse(Module.describeModel(JSON.stringify({ model: modelXml, lookupTables })))
+        described: JSON.parse(Module.describeModel(JSON.stringify({ model: modelXml, inputs: inputContents })))
       });
       return;
     }
 
-    if (message.type === 'lookup') {
-      lookupTables[message.name] = message.csv;
+    if (message.type === 'input') {
+      inputContents[message.source] = message.content;
       return;
     }
 
@@ -184,8 +184,8 @@ self.onmessage = async (event) => {
       }
       // one Input per Engine (consumed by construction)
       const input = new Module.Input(modelXml);
-      for (const [ name, csv ] of Object.entries(lookupTables)) {
-        input.addLookupTable(name, csv);
+      for (const [ source, content ] of Object.entries(inputContents)) {
+        input.addInputContent(source, content);
       }
       input.setInstance(message.instances);
 

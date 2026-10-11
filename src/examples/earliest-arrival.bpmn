@@ -19,7 +19,7 @@
       <bpmn2:extensionElements>
         <bpmnos:status>
           <bpmnos:attributes>
-            <bpmnos:attribute id="Attribute_0vj3qof" type="collection" name="destinations := destinations(current_location)" />
+            <bpmnos:attribute id="Attribute_0vj3qof" type="string[]" name="destinations := destinations(current_location)" />
             <bpmnos:attribute id="Attribute_1n9rlco" type="decimal" name="duration" />
             <bpmnos:attribute id="Attribute_1s6sf1v" type="decimal" name="departure" />
             <bpmnos:attribute id="Attribute_219l1cu" type="string" name="next_location" />
@@ -45,7 +45,7 @@
           <bpmnos:status>
             <bpmnos:attributes>
               <bpmnos:attribute id="Attribute_1a4ebdg" type="integer" name="index" />
-              <bpmnos:attribute id="Attribute_265dljm" type="collection" name="departures" />
+              <bpmnos:attribute id="Attribute_265dljm" type="decimal[]" name="departures" />
             </bpmnos:attributes>
             <bpmnos:restrictions>
               <bpmnos:restriction id="Restriction_2pi7p4k" scope="exit" expression="departure &#62;= timestamp" />
@@ -53,7 +53,7 @@
             <bpmnos:operators>
               <bpmnos:operator id="Operator_1a0ojnh" expression="next_location := destinations[index]" />
               <bpmnos:operator id="Operator_2geg86m" expression="departures := departures(current_location,next_location)" />
-              <bpmnos:operator id="Operator_332go68" expression="departure := min{ d in departures | d &#62;= timestamp}" />
+              <bpmnos:operator id="Operator_332go68" expression="departure := min{ d | d in departures, d &#62;= timestamp }" />
               <bpmnos:operator id="Operator_3ndqeio" expression="duration := durations(current_location,next_location)" />
             </bpmnos:operators>
             <bpmnos:decisions>
@@ -112,12 +112,12 @@
   </bpmn2:process>
   <bpmn2:dataStore id="DataStore_2" name="Time table">
     <bpmn2:extensionElements>
-      <bpmnos:tables>
-        <bpmnos:table id="Table_1vnjt8e" source="destinations.csv" name="destinations" header="Location;Destinations" />
-        <bpmnos:table id="Table_1askkpg" source="durations.csv" name="durations" header="From;To;Duration" />
-        <bpmnos:table id="Table_23iu9ip" source="departures.csv" name="departures" header="From;To;Departures" />
-        <bpmnos:table id="Table_21gbve5" source="heuristic.csv" name="heuristic" header="Location;Heuristic" />
-      </bpmnos:tables>
+      <bpmnos:inputs>
+        <bpmnos:input id="Table_1vnjt8e" name="destinations" type="lookup" source="destinations.csv" schema="Location: string;Destinations: string[]" />
+        <bpmnos:input id="Table_1askkpg" name="durations" type="lookup" source="durations.csv" schema="From: string;To: string;Duration: decimal" />
+        <bpmnos:input id="Table_23iu9ip" name="departures" type="lookup" source="departures.csv" schema="From: string;To: string;Departures: decimal[]" />
+        <bpmnos:input id="Table_21gbve5" name="heuristic" type="lookup" source="heuristic.csv" schema="Location: string;Heuristic: decimal" />
+      </bpmnos:inputs>
     </bpmn2:extensionElements>
   </bpmn2:dataStore>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">

@@ -381,12 +381,14 @@ Key source (this repo):
   standing in the mode it was in, and a failure to read the choices leaves it standing with a choice the
   reader cannot yet make, which is what the tab draws in any case; neither is the run failing, and treating
   every error as one turned a collision into a dead run with nothing to show for it.
-- `src/input/` — what a run is given: `index.js` builds the instance table and one table per lookup the
-  model references, each editable in place, and hands them back one at a time rather than mounting them, so
+- `src/input/` — what a run is given: `index.js` builds the instance table and one field per input the model
+  declares, taken from the execution data's `getInputs()`: a grid for a lookup, its columns the names of its
+  typed header, and a text field for a matrix (CSV without a header row) or an object (JSON). Each is editable
+  in place, and they are handed back one at a time rather than mounted, so
   the same provider serves any source and any place they are shown; `tabs.js` turns that set into columns of
   the panel, one per table, right of everything a run produces. Each column names its table and, beneath the
-  name, the file it was read from: the source the model declares for a lookup, the name of a file the reader
-  has loaded, which the table entry reports through `onLoad`, or "No file selected". The set of lookups is a
+  name, the file it was read from: the source the model declares for an input, the name of a file the reader
+  has loaded, which the table entry reports through `onLoad`, or "No file selected". The set of inputs is a
   property of the model, so the columns of the old model are taken away and the new ones added whenever a
   model is read, and all of them go when the run that mounted them ends. Reading a file into a table is not
   such a change: it alters what that table was read from and nothing else, so the columns stay as they are
@@ -394,10 +396,10 @@ Key source (this repo):
   the column the reader had opened and lose its width and where it was scrolled to.
 
   What a table holds outlives the provider, which lives only as long as a run. A reader going back to
-  modelling ends the run, and the instance rows they typed and the files they read into the lookups are
+  modelling ends the run, and the instance rows they typed and the files they read into the inputs are
   theirs to come back to, so the text of each table is kept by `src/live/index.js`, which outlives a run, and
   handed to the provider under the key of the table it belongs to. A rebuilt table is filled from it, and
-  what the model has made stale is not restored: a lookup the model no longer declares is never asked for
+  what the model has made stale is not restored: an input the model no longer declares is never asked for
   again, and one whose declared header has changed restores nothing, `setCsv` refusing text that names other
   columns. The instance table is always restored, its columns being fixed by the CSV format the engine reads.
 
