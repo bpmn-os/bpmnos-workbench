@@ -61,7 +61,7 @@ export default class MessageStore {
         origin: record.origin,
         sender: header.sender,
         recipient: header.recipient,
-        name: header.name,
+        name: record.name, // the name of a message is given beside its header, not in it
         header,
         content: record.content || {},
         color: color || null,

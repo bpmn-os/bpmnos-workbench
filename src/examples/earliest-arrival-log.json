@@ -19,9 +19,9 @@
       "state": "CREATED",
       "status": {
         "timestamp": 0,
-        "initial_location": "Origin",
-        "final_location": "Destination",
-        "current_location": "Origin"
+        "initial_location": null,
+        "final_location": null,
+        "current_location": null
       },
       "data": {
         "instance": "Instance1"
@@ -240,10 +240,7 @@
         "initial_location": "Origin",
         "final_location": "Destination",
         "current_location": "Origin",
-        "destinations": [
-          "Location1",
-          "Location2"
-        ],
+        "destinations": [],
         "duration": null,
         "departure": null,
         "next_location": null
@@ -264,10 +261,7 @@
         "initial_location": "Origin",
         "final_location": "Destination",
         "current_location": "Origin",
-        "destinations": [
-          "Location1",
-          "Location2"
-        ],
+        "destinations": [],
         "duration": null,
         "departure": null,
         "next_location": null
@@ -288,10 +282,7 @@
         "initial_location": "Origin",
         "final_location": "Destination",
         "current_location": "Origin",
-        "destinations": [
-          "Location1",
-          "Location2"
-        ],
+        "destinations": [],
         "duration": null,
         "departure": null,
         "next_location": null
@@ -312,10 +303,7 @@
         "initial_location": "Origin",
         "final_location": "Destination",
         "current_location": "Origin",
-        "destinations": [
-          "Location1",
-          "Location2"
-        ],
+        "destinations": [],
         "duration": null,
         "departure": null,
         "next_location": null
@@ -1297,7 +1285,8 @@
         "final_location": "Destination",
         "current_location": "Location1",
         "destinations": [
-          "Destination"
+          "Location1",
+          "Location2"
         ],
         "duration": 8,
         "departure": 0,
@@ -1320,7 +1309,8 @@
         "final_location": "Destination",
         "current_location": "Location1",
         "destinations": [
-          "Destination"
+          "Location1",
+          "Location2"
         ],
         "duration": 8,
         "departure": 0,
@@ -1343,7 +1333,8 @@
         "final_location": "Destination",
         "current_location": "Location1",
         "destinations": [
-          "Destination"
+          "Location1",
+          "Location2"
         ],
         "duration": 8,
         "departure": 0,
@@ -1366,7 +1357,8 @@
         "final_location": "Destination",
         "current_location": "Location1",
         "destinations": [
-          "Destination"
+          "Location1",
+          "Location2"
         ],
         "duration": 8,
         "departure": 0,

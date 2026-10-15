@@ -369,11 +369,11 @@ A side panel listing **messages** (the `{message: …}` stream entries), styled 
 **content**.
 
 - **Source (verified in code).** `Message::jsonify()` (`engine/execution/engine/src/Message.cpp`) emits
-  top-level **`origin`** (throwing node id) + **`state`** (`CREATED`/`DELIVERED`/`WITHDRAWN`), a
-  **`header`** map, and a **`content`** map. **Name and sender live inside `header`** (`header.name`,
-  `header.sender`) — not top-level; origin is top-level. So collapsed = `origin` + `header.name` +
-  `header.sender` (consider showing `state` as a status pill); expanded = `content` (+ full header /
-  recipient / state). No engine change needed.
+  top-level **`origin`** (throwing node id) + **`state`** (`CREATED`/`DELIVERED`/`WITHDRAWN`) + **`name`**,
+  a **`header`** map holding `sender`, `recipient` and the parameters the message states, and the
+  **`content`**, one object of the type the message states. The name is given beside the header, not in it.
+  So collapsed = `name` + `header.sender` (consider showing `state` as a status pill); expanded = origin,
+  the header and the fields of the content object (+ recipient / state).
 - **Separation.** Messages are BPMNOS-specific, so this panel is workbench-provided — but it **reuses
   the `bpmn-js-side-panel` expandable-entry primitive** (R2), the same one Issues and Tokens use, filling
   the content slot with message `content`.

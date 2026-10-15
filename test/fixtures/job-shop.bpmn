@@ -32,8 +32,8 @@
         <bpmnos:status>
           <bpmnos:attributes>
             <bpmnos:attribute id="Index" type="integer" name="index" />
-            <bpmnos:attribute id="RequestedMachine" type="string" name="machine := machines[index]" />
-            <bpmnos:attribute id="Duration" type="decimal" name="duration := durations[index]" />
+            <bpmnos:attribute id="RequestedMachine" type="string" name="machine" />
+            <bpmnos:attribute id="Duration" type="decimal" name="duration" />
           </bpmnos:attributes>
         </bpmnos:status>
         <bpmnos:loopCharacteristics>
@@ -45,6 +45,14 @@
       <bpmn2:outgoing>Flow_0xaxr01</bpmn2:outgoing>
       <bpmn2:multiInstanceLoopCharacteristics isSequential="true" />
       <bpmn2:startEvent id="JobStartEvent">
+        <bpmn2:extensionElements>
+          <bpmnos:status>
+            <bpmnos:operators>
+              <bpmnos:operator id="Operator_Machine" expression="machine := machines[index]" />
+              <bpmnos:operator id="Operator_Duration" expression="duration := durations[index]" />
+            </bpmnos:operators>
+          </bpmnos:status>
+        </bpmn2:extensionElements>
         <bpmn2:outgoing>Flow_06kzyqb</bpmn2:outgoing>
       </bpmn2:startEvent>
       <bpmn2:endEvent id="JobEndEvent">
@@ -53,13 +61,15 @@
       <bpmn2:sequenceFlow id="Flow_06kzyqb" sourceRef="JobStartEvent" targetRef="RequestTask" />
       <bpmn2:sendTask id="RequestTask" name="Send request">
         <bpmn2:extensionElements>
-          
-            <bpmnos:message name="Request">
-              <bpmnos:parameter name="machine" value="machine" />
-              <bpmnos:content key="Job" attribute="instance" />
-              <bpmnos:content key="Duration" attribute="duration" />
-            </bpmnos:message>
-          
+          <bpmnos:status>
+            <bpmnos:operators>
+              <bpmnos:operator id="Operator_SendJob" expression="request.job := instance" />
+              <bpmnos:operator id="Operator_SendDuration" expression="request.duration := duration" />
+            </bpmnos:operators>
+          </bpmnos:status>
+          <bpmnos:message name="request" type="{ job: string, duration: decimal }">
+            <bpmnos:parameter name="machine" value="machine" />
+          </bpmnos:message>
         </bpmn2:extensionElements>
         <bpmn2:incoming>Flow_06kzyqb</bpmn2:incoming>
         <bpmn2:outgoing>Flow_1t871bp</bpmn2:outgoing>
@@ -74,7 +84,7 @@
             </bpmnos:operators>
           </bpmnos:status>
           
-            <bpmnos:message name="Completion" />
+            <bpmnos:message name="completion" />
           
         </bpmn2:extensionElements>
         <bpmn2:incoming>Flow_1t871bp</bpmn2:incoming>
@@ -109,9 +119,6 @@
             <bpmnos:attribute id="JobDuration" type="decimal" name="duration" />
             <bpmnos:attribute id="Job" type="string" name="job" />
           </bpmnos:attributes>
-          <bpmnos:operators>
-            <bpmnos:operator id="OperatorJobRequests" expression="task_requests += 1" />
-          </bpmnos:operators>
         </bpmnos:status>
       </bpmn2:extensionElements>
       <bpmn2:sequenceFlow id="Flow_04nmpfp" sourceRef="CatchRequestMessage" targetRef="AdHocSubProcess" />
@@ -131,10 +138,15 @@
       <bpmn2:sequenceFlow id="Flow_0d3x89n" sourceRef="AdHocSubProcess" targetRef="ThrowCompletionMessage" />
       <bpmn2:startEvent id="CatchRequestMessage" name="Request" isInterrupting="false">
         <bpmn2:extensionElements>
-          <bpmnos:message name="Request">
+          <bpmnos:status>
+            <bpmnos:operators>
+              <bpmnos:operator id="Operator_ReceiveDuration" expression="duration := request.duration" />
+              <bpmnos:operator id="Operator_ReceiveJob" expression="job := request.job" />
+              <bpmnos:operator id="OperatorJobRequests" expression="task_requests += 1" />
+            </bpmnos:operators>
+          </bpmnos:status>
+          <bpmnos:message name="request" type="{ job: string, duration: decimal }">
             <bpmnos:parameter name="machine" value="machine" />
-            <bpmnos:content key="Duration" attribute="duration" />
-            <bpmnos:content key="Job" attribute="job" />
           </bpmnos:message>
         </bpmn2:extensionElements>
         <bpmn2:outgoing>Flow_04nmpfp</bpmn2:outgoing>
@@ -142,7 +154,7 @@
       </bpmn2:startEvent>
       <bpmn2:endEvent id="ThrowCompletionMessage" name="Task completion">
         <bpmn2:extensionElements>
-          <bpmnos:message name="Completion">
+          <bpmnos:message name="completion">
             <bpmnos:parameter name="recipient" value="job" />
           </bpmnos:message>
         </bpmn2:extensionElements>

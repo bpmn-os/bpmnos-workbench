@@ -11,7 +11,8 @@ import { createAnimation, createElementRegistry, createEventBus, createPrimitive
 /**
  * A message is held from the record creating it until the one delivering or withdrawing it, which is the
  * span in which it waits for a recipient and the span the Messages tab shows. The records here are of the
- * engine's own shape, `{ origin, state, header, content }`.
+ * engine's own shape, `{ origin, state, name, header, content }`, the name beside the header and the content one
+ * object of the type the message states.
  */
 
 const MODEL = new URL('../src/examples/earliest-arrival.bpmn', import.meta.url);
@@ -19,7 +20,8 @@ const MODEL = new URL('../src/examples/earliest-arrival.bpmn', import.meta.url);
 const created = (origin, sender, name, header = {}, content = {}) => ({
   origin,
   state: 'CREATED',
-  header: { name, sender, recipient: null, ...header },
+  name,
+  header: { sender, recipient: null, ...header },
   content
 });
 
@@ -28,24 +30,24 @@ const disposed = (origin, sender, state) => ({ origin, state, header: { sender }
 test('a created message is held under its origin and its sender', () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M1' }, { Duration: '24' }), '#123456');
+  store.apply(created('SendTask', 'Instance1', 'request', { machine: 'M1' }, { duration: 24 }), '#123456');
 
   const [ message ] = store.all();
 
   assert.equal(store.all().length, 1);
-  assert.equal(message.name, 'Request');
+  assert.equal(message.name, 'request');
   assert.equal(message.sender, 'Instance1');
   assert.equal(message.origin, 'SendTask');
   assert.equal(message.color, '#123456');
   assert.equal(message.header.machine, 'M1');
-  assert.equal(message.content.Duration, '24');
+  assert.equal(message.content.duration, 24);
 });
 
 test('a message of one sender is told from a message of another at the same node', () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request'));
-  store.apply(created('SendTask', 'Instance2', 'Request'));
+  store.apply(created('SendTask', 'Instance1', 'request'));
+  store.apply(created('SendTask', 'Instance2', 'request'));
 
   assert.deepEqual(store.all().map((message) => message.sender), [ 'Instance1', 'Instance2' ]);
 });
@@ -53,8 +55,8 @@ test('a message of one sender is told from a message of another at the same node
 test('a delivered message and a withdrawn one are no longer waiting, and are kept as a record', () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request'));
-  store.apply(created('SendTask', 'Instance2', 'Request'));
+  store.apply(created('SendTask', 'Instance1', 'request'));
+  store.apply(created('SendTask', 'Instance2', 'request'));
 
   store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
   store.apply(disposed('SendTask', 'Instance2', 'WITHDRAWN'));
@@ -68,8 +70,8 @@ test('a delivered message and a withdrawn one are no longer waiting, and are kep
 test('only an archived message may be forgotten, and forgetting is one message at a time', () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request'));
-  store.apply(created('SendTask', 'Instance2', 'Request'));
+  store.apply(created('SendTask', 'Instance1', 'request'));
+  store.apply(created('SendTask', 'Instance2', 'request'));
   store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
 
   assert.equal(store.forget('SendTask|Instance2'), false, 'one still waiting is the run\'s to deliver');
@@ -82,7 +84,7 @@ test('only an archived message may be forgotten, and forgetting is one message a
 test('the token that took a message is recorded from the delivery, which the message record does not say', () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request'));
+  store.apply(created('SendTask', 'Instance1', 'request'));
   store.deliveredTo({ origin: 'SendTask', header: { sender: 'Instance1' } },
     { instanceId: 'Instance2', nodeId: 'ReceiveTask', color: '#3c8' });
   store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
@@ -95,9 +97,9 @@ test('the token that took a message is recorded from the delivery, which the mes
 test('a node that sent a message may send another under the same key', () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M1' }));
+  store.apply(created('SendTask', 'Instance1', 'request', { machine: 'M1' }));
   store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
-  store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M2' }));
+  store.apply(created('SendTask', 'Instance1', 'request', { machine: 'M2' }));
 
   assert.equal(store.all().length, 1);
   assert.equal(store.all()[0].header.machine, 'M2');
@@ -110,7 +112,7 @@ test('the service announces a change and the messages go when the tokens go', ()
 
   eventBus.on('messages.changed', () => announced.push(messages.all().length));
 
-  messages.apply(created('SendTask', 'Instance1', 'Request'));
+  messages.apply(created('SendTask', 'Instance1', 'request'));
   eventBus.fire('tokens.cleared');
 
   assert.deepEqual(announced, [ 1, 0 ]);
@@ -126,7 +128,7 @@ test('the service answers a clearance without answering the event', () => {
   // there: were the clearance to answer `diagram.clear`, the canvas would never hear it
   eventBus.on('diagram.clear', () => reached.push('after'));
 
-  messages.apply(created('SendTask', 'Instance1', 'Request'));
+  messages.apply(created('SendTask', 'Instance1', 'request'));
   eventBus.fire('diagram.clear');
 
   assert.deepEqual(reached, [ 'after' ]);
@@ -145,7 +147,7 @@ test('the player holds a message while it waits, in the colour of the token that
     get: (name) => name === 'messages' ? messages : undefined
   });
 
-  player.setLog([ { message: created('SendTask', 'Instance1', 'Request', { machine: 'M1' }) } ]);
+  player.setLog([ { message: created('SendTask', 'Instance1', 'request', { machine: 'M1' }) } ]);
   await player.play();
 
   assert.equal(messages.all().length, 1);
@@ -174,7 +176,7 @@ test('the player records who took a message, from the delivery, and archives it 
     get: (name) => name === 'messages' ? messages : undefined
   });
 
-  const message = created('SendTask', 'Instance1', 'Request', { machine: 'M1' });
+  const message = created('SendTask', 'Instance1', 'request', { machine: 'M1' });
 
   for (const delivery of [
     { decision: 'messagedelivery', instanceId: 'Instance2', nodeId: 'ReceiveTask', message, reward: 0 },
@@ -249,11 +251,11 @@ test('the tab says in its own name how many messages wait, and says nothing when
 
   assert.equal(labels[labels.length - 1], 'Messages', 'nothing waiting, so nothing in the name');
 
-  store.apply(created('Sender', 'Instance_1', 'Request'), '#1a73e8');
+  store.apply(created('Sender', 'Instance_1', 'request'), '#1a73e8');
   eventBus.fire('messages.changed', {});
   assert.equal(labels[labels.length - 1], 'Messages (1)');
 
-  store.apply(created('Sender', 'Instance_2', 'Request'), '#e8710a');
+  store.apply(created('Sender', 'Instance_2', 'request'), '#e8710a');
   eventBus.fire('messages.changed', {});
   assert.equal(labels[labels.length - 1], 'Messages (2)');
 });
@@ -261,13 +263,13 @@ test('the tab says in its own name how many messages wait, and says nothing when
 test('a row is the message name and its sender, marked with an envelope in the sender\'s colour', async () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M1' }, { Duration: '24' }), '#c0392b');
+  store.apply(created('SendTask', 'Instance1', 'request', { machine: 'M1' }, { duration: 24 }), '#c0392b');
 
   const { body } = await panel(store);
 
   const row = body.querySelector('.bjs-token-entry');
 
-  assert.equal(row.querySelector('.bjs-token-label').getAttribute('title'), 'Request');
+  assert.equal(row.querySelector('.bjs-token-label').getAttribute('title'), 'request');
   assert.equal(row.querySelector('.bjs-token-node').textContent, 'Instance1');
   assert.ok(row.querySelector('svg path'), 'the envelope BPMN draws a message with');
   assert.equal(row.querySelector('svg circle').getAttribute('fill'), '#c0392b');
@@ -276,7 +278,7 @@ test('a row is the message name and its sender, marked with an envelope in the s
 test('an expanded row shows the origin, the header and the contents', async () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M1' }, { Duration: '24' }));
+  store.apply(created('SendTask', 'Instance1', 'request', { machine: 'M1' }, { duration: 24 }));
 
   const { body } = await panel(store);
 
@@ -285,13 +287,13 @@ test('an expanded row shows the origin, the header and the contents', async () =
   assert.equal(lines[0], 'OriginSendTask', 'the node it was sent from, above the header');
   assert.ok(lines.some((line) => /machineM1/.test(line)), 'a header entry');
   assert.ok(lines.some((line) => /recipientundefined/.test(line)), 'an entry the run left unset');
-  assert.ok(lines.some((line) => /Duration24/.test(line)), 'a content');
+  assert.ok(lines.some((line) => /duration24/.test(line)), 'a field of the content object');
 });
 
 test('the header does not repeat what the collapsed row states', async () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request', { machine: 'M1' }));
+  store.apply(created('SendTask', 'Instance1', 'request', { machine: 'M1' }));
 
   const { body } = await panel(store);
 
@@ -308,7 +310,7 @@ test('the tab is drawn again when the store announces a change', async () => {
 
   assert.equal(body.querySelector('.bjs-token-empty').textContent, 'No messages.');
 
-  messages.apply(created('SendTask', 'Instance1', 'Request'));
+  messages.apply(created('SendTask', 'Instance1', 'request'));
   panelBus.fire('messages.changed');
 
   assert.equal(body.querySelectorAll('.bjs-token-entry').length, 1);
@@ -322,8 +324,8 @@ test('the tab is drawn again when the store announces a change', async () => {
 test('"Show archive" governs what the tab lists, and not what the store holds', async () => {
   const store = new MessageStore();
 
-  store.apply(created('SendTask', 'Instance1', 'Request'));
-  store.apply(created('SendTask', 'Instance2', 'Request'));
+  store.apply(created('SendTask', 'Instance1', 'request'));
+  store.apply(created('SendTask', 'Instance2', 'request'));
   store.apply(disposed('SendTask', 'Instance1', 'DELIVERED'));
 
   const { body, footer, labels } = await panel(store);

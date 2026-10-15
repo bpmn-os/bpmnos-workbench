@@ -99,8 +99,9 @@ function recipients(parent, rows, title) {
 }
 
 
-// what the collapsed row already says, and which the header therefore does not repeat
-const SHOWN_IN_SUMMARY = [ 'name', 'sender' ];
+// what the collapsed row already says, and which the header therefore does not repeat; the name of the message
+// is no entry of the header, so a header parameter named `name` is shown as any other
+const SHOWN_IN_SUMMARY = [ 'sender' ];
 
 /**
  * One section of the expanded row. A key the run left without a value is shown as such rather than left
